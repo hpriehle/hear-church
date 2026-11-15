@@ -223,6 +223,45 @@ async def test_router_falls_back_on_error():
     assert r.engine == "ollama" and "error" in r.note
 
 
+async def test_router_forgets_an_error_once_claude_works_again():
+    t = make_translator(claude_fail=True)
+    await t.translate("Hello.")
+    assert t.last_error == "boom"
+    t.active.fail = False
+    r = await t.translate("Hello again.")
+    assert r.engine == "claude" and t.last_error == ""
+
+
+async def test_router_start_failure_is_reported_once_and_cleared_on_recovery(monkeypatch):
+    import app.translate.router as router
+
+    class Starting(FakeSession):
+        fail_start = True
+
+        def __init__(self, *a, **k):
+            super().__init__(delay=0.01)
+            self.ready = False
+
+        async def start(self):
+            pass
+
+        async def ask(self, text):
+            if Starting.fail_start:
+                self.last_error = "cannot reach Anthropic (internet down?)"
+                raise RuntimeError(f"claude error: {self.last_error}")
+            return await super().ask(text)
+
+    monkeypatch.setattr(router, "ClaudeSession", Starting)
+    monkeypatch.setattr(router, "ApiSession", Starting)
+    t = make_translator()
+    t.active = None
+    await t._prepare_standby()
+    assert t.last_error == "Claude start failed: claude error: cannot reach Anthropic (internet down?)"
+    Starting.fail_start = False
+    await t._prepare_standby()
+    assert t.last_error == "" and t.active is not None and t.active.ready
+
+
 async def test_router_late_claude_beats_slow_ollama():
     t = make_translator(claude_delay=0.6, ollama_delay=2.0, timeout=0.3)
     r = await t.translate("hello")

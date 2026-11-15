@@ -218,11 +218,15 @@ class Translator:
             self.standby = s
             self._reload_pending = False
             self._spawn_failures = 0
+            self.last_error = ""                       # it works again: don't keep showing the old failure
         except Exception as e:
             self._spawn_failures += 1
             backoff = min(120.0, 5.0 * 2 ** (self._spawn_failures - 1))
             self._restart_after = time.monotonic() + backoff
-            self.last_error = f"Claude start failed: {e} {s.last_error}".strip()
+            detail = str(e)
+            if s.last_error and s.last_error not in detail:   # the exception usually already says it
+                detail = f"{detail} {s.last_error}"
+            self.last_error = f"Claude start failed: {detail}".strip()
             log.warning("%s (retry in %.0fs)", self.last_error, backoff)
             await s.close()
             self.retired_usage.add(s.usage)
@@ -323,6 +327,7 @@ class Translator:
             note = (note + " " + ("translator skipped it as noise" if raw and "<skip>" in raw else "empty reply")).strip()
         if engine == "claude":
             self._consecutive_errors = 0
+            self.last_error = ""
             if session:
                 session.turns += 1
         if text:
