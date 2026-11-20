@@ -3,7 +3,9 @@ with every field, address search + pin drag, the e-mailed code, /account with th
 code, the Mac's sign-in routes, wrong/expired codes and the limits. Desktop and iPhone-size.
 Photon is faked; map tiles go to OSM (the test checks they carry a Referer, which OSM's tile policy requires).
 Not a project dependency: run with `uv run --with playwright pytest tests/test_start_signin_browser.py`.
-HC_SCREENS=1 writes the screenshots to docs/screens/start-signin/."""
+HC_SCREENS=1 writes the screenshots to docs/screens/start-signin/.
+The header (Sign in / Get started, or Account when signed in) is checked on /start, /account and, once the site is
+built (`cd site && npm run build`), on the site's /pricing."""
 import json
 import os
 import re
@@ -24,6 +26,7 @@ VIEWPORTS = {"desktop": {"viewport": {"width": 1280, "height": 900}},
              "iphone": {"viewport": {"width": 390, "height": 844}, "device_scale_factor": 3, "is_mobile": True,
                         "has_touch": True}}
 EMAIL = "bishop@example.org"
+SITE_PAGE = Path(__file__).resolve().parent.parent / "site/dist/pricing.html"
 
 
 def code6(pg, resend, n):
@@ -50,8 +53,22 @@ def test_start_then_account_then_sign_in_again(size, hear, server, tmp_path):  #
         ctx.route("https://photon.komoot.io/**", lambda r: r.fulfill(json=PHOTON))
         ctx.route("https://tile.openstreetmap.org/**",
                   lambda r: (tile_referers.append(r.request.headers.get("referer")), r.continue_()))
+        if SITE_PAGE.exists():   # the site's pages come from the Cloudflare Worker; the same origin as the hub
+            ctx.route(base + "/pricing", lambda r: r.fulfill(path=SITE_PAGE, content_type="text/html"))
         pg = ctx.new_page()
         n = iter(range(1, 100))
+
+        def header(signed_in):
+            """Every header: "Sign in" + "Get started" signed out, only "Account" (to /account) signed in."""
+            for path in ["/start", "/account"] + (["/pricing"] if SITE_PAGE.exists() else []):
+                pg.goto(base + path, wait_until="networkidle")
+                links = pg.locator(".top nav a")
+                texts = [t.strip() for t in links.all_inner_texts()]
+                if signed_in:
+                    assert texts[-1] == "Account" and "Sign in" not in texts and "Get started" not in texts, (path, texts)
+                    assert links.last.get_attribute("href") == "/account"
+                else:
+                    assert texts[-2:] == ["Sign in", "Get started"], (path, texts)
 
         def shot(name):
             pg.wait_for_timeout(300)
@@ -60,6 +77,8 @@ def test_start_then_account_then_sign_in_again(size, hear, server, tmp_path):  #
         def msg(sel):
             pg.locator(sel).wait_for(state="visible")
             return pg.locator(sel).inner_text()
+
+        header(signed_in=False)
 
         # ---- /start: the form's own checks first
         pg.goto(base + "/start")
@@ -126,6 +145,7 @@ def test_start_then_account_then_sign_in_again(size, hear, server, tmp_path):  #
         pg.locator("#done-view").wait_for(state="visible")
         assert pg.inner_text("#done-email") == EMAIL
         shot("start-done")
+        header(signed_in=True)
 
         cong = hear.db.by_slug("maple-grove-ward")
         assert cong["lat"] < 45.0725 and cong["lng"] > -93.4555   # dragged down and right from the search result
@@ -157,6 +177,8 @@ def test_start_then_account_then_sign_in_again(size, hear, server, tmp_path):  #
         pg.click("#logout")
         pg.locator("#login-view").wait_for(state="visible")
         shot("signed-out")
+        header(signed_in=False)
+        pg.goto(base + "/account")
 
         # ---- sign in again with "Send me a code": an expired code, a wrong one, then the right one
         pg.fill("#email", EMAIL)

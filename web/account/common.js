@@ -194,3 +194,10 @@ const HC = {
     };
   },
 };
+
+// Signed in: the header's "Sign in" becomes "Account" and "Get started" goes. Same as site/src/layouts/Base.astro.
+fetch("/api/hc/web/me").then((r) => r.json()).then((me) => {
+  if (!me.signed_in || !me.congregation) return;
+  document.querySelector('.top nav a[href="/start"]').remove();
+  document.querySelector('.top nav a[href="/account"]').textContent = "Account";
+}).catch(() => {});
