@@ -308,7 +308,7 @@ public sealed class MainView : Grid
     private UIElement LiveEnglishToggle()
     {
         var s = new StackPanel { Spacing = 4 };
-        var t = new ToggleSwitch { Header = "Live English", IsOn = _model.LiveEnglish };
+        var t = new ToggleSwitch { Header = "Live", IsOn = _model.LiveEnglish };
         t.Toggled += (_, _) => { if (t.IsOn != _model.LiveEnglish) _ = _model.SetLiveEnglish(t.IsOn); };
         s.Children.Add(t);
         s.Children.Add(Ui.T("Phones on this Wi-Fi hear the room audio", Ui.Callout, Ui.Secondary));
@@ -426,7 +426,7 @@ public sealed class MainView : Grid
         var audio = settings.Settings.Audio;
         if (settings.Devices.FirstOrDefault(d => d.Name == audio.InputDevice) is { Channels: > 1 } dev)
         {
-            var ch = new ComboBox { Header = "Channel", HorizontalAlignment = HorizontalAlignment.Stretch, IsEnabled = !model.Running };
+            var ch = new ComboBox { Header = "Channel", HorizontalAlignment = HorizontalAlignment.Stretch };
             ch.Items.Add(new ComboBoxItem { Content = "Mix all", Tag = 0 });
             for (var i = 1; i <= dev.Channels; i++) ch.Items.Add(new ComboBoxItem { Content = i.ToString(), Tag = i });
             ch.SelectedIndex = Math.Min(audio.InputChannel, dev.Channels);
@@ -444,7 +444,7 @@ public sealed class MainView : Grid
     public static ComboBox InputPicker(AppModel model, EngineSettings settings)
     {
         var audio = settings.Settings.Audio;
-        var box = new ComboBox { Header = "Input", HorizontalAlignment = HorizontalAlignment.Stretch, IsEnabled = !model.Running };
+        var box = new ComboBox { Header = "Input", HorizontalAlignment = HorizontalAlignment.Stretch };
         var def = settings.Devices.FirstOrDefault(d => d.Default == true)?.Name ?? "none";
         box.Items.Add(new ComboBoxItem { Content = $"PC default ({def})", Tag = "" });
         if (model.MissingInput is { } missing) box.Items.Add(new ComboBoxItem { Content = $"{missing} (not connected)", Tag = missing });

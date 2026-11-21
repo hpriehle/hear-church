@@ -33,7 +33,7 @@ export function useLiveStats(active: boolean): LiveStats | null {
 }
 
 export async function playLiveEnglish(title: string): Promise<void> {
-  if (!LiveEnglish) throw new Error('Live English is not available on this phone.');
+  if (!LiveEnglish) throw new Error('Live is not available on this phone.');
   await LiveEnglish.play(null, null, null, title);
 }
 

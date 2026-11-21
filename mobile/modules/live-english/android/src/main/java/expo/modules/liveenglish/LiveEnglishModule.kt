@@ -13,7 +13,7 @@ class LiveEnglishModule : Module() {
     Function("startBrowsing") {}
     Function("stopBrowsing") {}
     AsyncFunction("play") { _: String?, _: String?, _: Int?, _: String? ->
-      throw CodedException("Live English isn't available on Android yet.")
+      throw CodedException("Live isn't available on Android yet.")
     }
     Function("stop") {}
     Function("getStats") { mapOf("active" to false, "wireless" to false, "outputName" to "") }

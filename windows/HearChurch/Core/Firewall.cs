@@ -12,7 +12,7 @@ public static class Firewall
 {
     public const string RuleName = "Hear Church (This Wi-Fi only)";
     /// <summary>Live English: phones on the Wi-Fi send UDP to the engine (live/protocol.py, port 47300) and find it by Bonjour (5353).</summary>
-    public const string LiveRuleName = "Hear Church (Live English)";
+    public const string LiveRuleName = "Hear Church (Live)";
 
     /// <summary>Is there already a rule for this engine (this install's path)? netsh's "show rule" needs no elevation.</summary>
     public static bool HasRule(string exe, string rule = RuleName)
@@ -38,7 +38,7 @@ public static class Firewall
     /// <summary>The netsh arguments that add the rule (one string: the elevated start can't take an argument list).</summary>
     public static string AddRuleArguments(string exe, bool live = false) => live
         ? $"advfirewall firewall add rule name=\"{LiveRuleName}\" dir=in action=allow protocol=UDP localport=47300,5353 profile=any " +
-          $"enable=yes program=\"{exe}\" description=\"Phones on this Wi-Fi hear the room audio (Live English).\""
+          $"enable=yes program=\"{exe}\" description=\"Phones on this Wi-Fi hear the room audio (Live).\""
         : $"advfirewall firewall add rule name=\"{RuleName}\" dir=in action=allow protocol=TCP profile=any enable=yes " +
         $"program=\"{exe}\" description=\"Phones on this Wi-Fi reach Hear Church's translation (Settings: This Wi-Fi only).\"";
 
@@ -71,6 +71,6 @@ public static class Firewall
         });
     }
 
-    public const string LiveDeclined = "Windows Firewall may keep phones on this Wi-Fi from hearing Live English. Turn Live English off and on again and allow Hear Church when Windows asks.";
+    public const string LiveDeclined = "Windows Firewall may keep phones on this Wi-Fi from hearing Live. Turn Live off and on again and allow Hear Church when Windows asks.";
     public const string Declined = "Windows Firewall may keep phones on this Wi-Fi from connecting to this PC. Choose This Wi-Fi only again and allow Hear Church when Windows asks.";
 }

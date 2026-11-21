@@ -44,9 +44,9 @@ public class LiveEnglishModule: Module {
       } else if let e = self.senders.values.first {
         endpoint = e
       } else {
-        throw Exception(name: "NoSender", description: "The Live English sender wasn't found on this Wi-Fi.")
+        throw Exception(name: "NoSender", description: "Live wasn't found on this Wi-Fi.")
       }
-      try self.start(endpoint, title: title ?? "Live English")
+      try self.start(endpoint, title: title ?? "Live")
     }.runOnQueue(.main)
 
     Function("stop") {

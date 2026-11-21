@@ -36,13 +36,13 @@
 		<true/>
 	</dict>
 	<key>NSLocalNetworkUsageDescription</key>
-	<string>With Live English on, phones on this Wi-Fi hear the room audio from this Mac.</string>
+	<string>With Live on, phones on this Wi-Fi hear the room audio from this Mac.</string>
 	<key>NSLocationUsageDescription</key>
 	<string>Used once, if you ask, to place your building on the map. Only the building's location is saved.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>Used once, if you ask, to place your building on the map. Only the building's location is saved.</string>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>Hear Church listens to the meeting through this microphone and translates it for listeners' phones. The sound itself never leaves this Mac, unless you turn on Live English for phones on this Wi-Fi.</string>
+	<string>Hear Church listens to the meeting through this microphone and translates it for listeners' phones. The sound itself never leaves this Mac, unless you turn on Live for phones on this Wi-Fi.</string>
 	<key>SUAutomaticallyUpdate</key>
 	<true/>
 	<key>SUEnableAutomaticChecks</key>

@@ -229,7 +229,7 @@ private struct LiveEnglishToggle: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
-            Toggle("Live English", isOn: Binding(get: { model.liveEnglish }, set: { on in
+            Toggle("Live", isOn: Binding(get: { model.liveEnglish }, set: { on in
                 Task { await model.setLiveEnglish(on) }
             }))
             .toggleStyle(.switch)
@@ -297,7 +297,6 @@ private struct SoundSection: View {
                     Divider()
                     ForEach(s.devices, id: \.name) { Text($0.name).tag($0.name) }
                 }
-                .disabled(model.running)
                 if let dev = s.devices.first(where: { $0.name == audio.input_device }), dev.channels > 1 {
                     Picker("Channel", selection: Binding(get: { audio.input_channel }, set: { ch in
                         Task { await model.engine.set(["audio": ["input_channel": ch]]) }
@@ -305,7 +304,6 @@ private struct SoundSection: View {
                         Text("Mix all").tag(0)
                         ForEach(1...dev.channels, id: \.self) { Text("\($0)").tag($0) }
                     }
-                    .disabled(model.running)
                 }
                 GainSlider(gain: audio.input_gain)
             } else {

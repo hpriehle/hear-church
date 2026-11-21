@@ -10,7 +10,7 @@ struct ContentView: View {
         ScrollView {
             VStack(spacing: 28) {
                 VStack(spacing: 6) {
-                    Text("Live English")
+                    Text("Live")
                         .font(.largeTitle.bold())
                     Text("Hear the chapel microphone in your earbuds")
                         .font(.body)
