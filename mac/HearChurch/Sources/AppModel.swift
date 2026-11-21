@@ -100,6 +100,13 @@ final class AppModel: ObservableObject {
         return engine.status?.engine.client?.listeners_by_lang?[code]?.captions ?? (listeners == 0 ? 0 : nil)
     }
 
+    /// Live English (free): the meeting's input also goes to phones on this Wi-Fi. Kept by the engine on this Mac.
+    var liveEnglish: Bool { engine.settings?.settings.audio.live_english ?? engine.status?.live_english?.on ?? false }
+
+    func setLiveEnglish(_ on: Bool) async {
+        await engine.set(["audio": ["live_english": on]])
+    }
+
     func setSharing(local: Bool) async {
         await engine.set(["server": ["sharing": local ? "local" : "cloud"]])
         // The engine picks its network address when it starts (this Mac only, or the Wi-Fi for local

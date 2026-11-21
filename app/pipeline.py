@@ -10,6 +10,8 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import socket
+import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
@@ -33,6 +35,9 @@ log = logging.getLogger("pipeline")
 
 
 class Pipeline:
+    live = None                    # Live English: (LiveSender, mDNS closer) while it sends the room audio
+    _live_lock = threading.Lock()
+
     def __init__(self, settings: Settings, glossaries: dict[str, dict[str, Any]], operator, stt: Transcriber):
         self.settings = settings
         self.glossaries = glossaries
@@ -250,6 +255,40 @@ class Pipeline:
             return {"mic_name": None, "mic_warning": None}
         return {"mic_name": getattr(src, "name", None), "mic_warning": src.warning}
 
+    def live_english(self) -> dict[str, Any]:
+        """For /api/status: the setting, and while sending, how many phones listen."""
+        live = self.live
+        return {"on": self.settings.audio.live_english, "sending": live is not None,
+                "listeners": live[0].listener_count() if live else 0}
+
+    def sync_live_english(self) -> None:
+        """Start or stop Live English to match the setting and the meeting (in a thread: mDNS blocks)."""
+        threading.Thread(target=self._sync_live, name="live-english", daemon=True).start()
+
+    def _sync_live(self) -> None:
+        with self._live_lock:
+            src = self.worker.source if self.worker else None
+            want = bool(self.capturing and self.settings.audio.live_english and isinstance(src, MicSource))
+            if want and self.live is None:
+                try:
+                    from live.sender import LiveSender, TapSource, advertise, local_ip
+                    sender = LiveSender(TapSource())
+                    close = advertise(self.settings.engine.name or socket.gethostname(), local_ip(), sender.port)
+                    sender.start()
+                    src.tap = sender.source.push
+                    self.live = (sender, close)
+                    log.info("Live English: sending the room audio on port %d", sender.port)
+                except Exception as e:  # never stops the meeting
+                    log.warning("Live English could not start: %s", e)
+            elif not want and self.live is not None:
+                if src is not None:
+                    src.tap = None
+                (sender, close), self.live = self.live, None
+                sender.stop()
+                if close:
+                    close()
+                log.info("Live English: stopped")
+
     def start(self, kind: str, device: str | None = None, file: str | Path | None = None,
               speed: float = 1.0, start_s: float = 0.0, max_s: float | None = None,
               record: bool = False, source: Source | None = None) -> None:
@@ -300,6 +339,7 @@ class Pipeline:
         self.started_at = time.time()
         self.last_error = ""
         self.worker.start()
+        self.sync_live_english()
         self._hold_awake()
         for ch in self.on_channels.values():
             ch.translator.prepare_fallback()
@@ -343,6 +383,7 @@ class Pipeline:
     def _capture_ended(self, err: str | None) -> None:
         self.capturing = False
         self.worker = None
+        self.sync_live_english()
         if err:
             self.last_error = f"Capture: {err}"
             self.operator.publish({"type": "log", "level": "error", "text": self.last_error})
@@ -553,6 +594,7 @@ class Pipeline:
         self.hints = self._hints()
         self.stt.cfg = settings.stt
         self.sync_wolof()
+        self.sync_live_english()
         for code, ch in self.channels.items():
             ch.backlog.cfg = settings.backlog
             ch.mixer.max_age_s = settings.backlog.drop_above_s + 5

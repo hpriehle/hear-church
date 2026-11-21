@@ -500,6 +500,8 @@ struct EngineStatus: Decodable, Equatable {
     let auto_speakers: [String]?   // speaker languages added in this meeting because they were heard
     let mic_warning: String?   // the engine's sentence when the microphone has gone quiet or away
     let mic_name: String?      // the input the meeting is using
+    struct LiveEnglish: Decodable, Equatable { let on: Bool; let sending: Bool; let listeners: Int }
+    let live_english: LiveEnglish?   // the room audio to phones on this Wi-Fi; engines before it don't send it
 }
 
 struct PackageStatus: Decodable, Equatable, Identifiable {
@@ -516,7 +518,9 @@ struct PackageList: Decodable, Equatable { let packages: [PackageStatus] }
 /// GET /api/state: the settings the operator can change, and what there is to choose from.
 struct EngineSettings: Decodable, Equatable {
     struct Settings: Decodable, Equatable {
-        struct Audio: Decodable, Equatable { let input_device: String; let input_channel: Int; let input_gain: Double }
+        struct Audio: Decodable, Equatable {
+            let input_device: String; let input_channel: Int; let input_gain: Double; let live_english: Bool?
+        }
         struct Tts: Decodable, Equatable { let engine: String; let voice: String; let rate: Int; let volume: Double; let speed: Double? }
         struct Translate: Decodable, Equatable { let claude_model: String }
         struct Voice: Decodable, Equatable { let engine: String; let voice: String; let speed: Double? }

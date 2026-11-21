@@ -933,3 +933,19 @@ def test_old_database_without_connect_columns_migrates(tmp_path):
     assert cong and not db.connect_code_ok(cong["id"], "123456")   # existing rows: no code yet
     code = db.new_connect_code(cong["id"])
     assert db.connect_code_ok(cong["id"], f"{code[:3]} {code[3:]}")
+
+
+async def test_live_english_flag_reaches_the_phone_apis(server, hear):
+    cong, token = make_cong(hear)
+    url = f"http://127.0.0.1:{server}/api/hc/c/dakar-ward"
+    async with httpx.AsyncClient() as http:
+        assert (await http.get(url)).json()["live_english"] is False
+        eng = await engine(server, token)
+        await start(eng, ["fr"], live_english=True)
+        assert (await http.get(url)).json()["live_english"] is True
+        await eng.send(json.dumps({"type": "languages", "languages": ["fr"], "live_english": False}))
+        await asyncio.sleep(0.2)
+        assert (await http.get(url)).json()["live_english"] is False
+        await eng.send(json.dumps({"type": "session_stop"}))
+        await asyncio.sleep(0.2)
+        assert (await http.get(url)).json()["live_english"] is False

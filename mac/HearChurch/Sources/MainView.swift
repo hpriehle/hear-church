@@ -182,6 +182,7 @@ private struct Sidebar: View {
                         Text(msg).foregroundStyle(.red).font(.callout)
                     }
                     if model.running { DuringMeeting() } else { BeforeMeeting() }
+                    LiveEnglishToggle()
                     SoundSection()
                     if model.running {
                         LanguagesSection()   // before a meeting the selector is large, in the main pane
@@ -217,6 +218,25 @@ private struct BeforeMeeting: View {
             ForEach(model.checks) { CheckRow(check: $0) }
             if model.onBattery {
                 Text("Keep the lid open and the Mac plugged in until the meeting ends.").font(.callout).foregroundStyle(.secondary)
+            }
+        }
+    }
+}
+
+/// Live English: the room audio, as it comes in, to phones on this Wi-Fi (free).
+private struct LiveEnglishToggle: View {
+    @EnvironmentObject var model: AppModel
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Toggle("Live English", isOn: Binding(get: { model.liveEnglish }, set: { on in
+                Task { await model.setLiveEnglish(on) }
+            }))
+            .toggleStyle(.switch)
+            Text("Phones on this Wi-Fi hear the room audio, free").font(.callout).foregroundStyle(.secondary)
+            if model.running, let live = model.engine.status?.live_english, live.sending {
+                Label("\(live.listeners) \(live.listeners == 1 ? "phone" : "phones") listening", systemImage: "wifi")
+                    .font(.callout).monospacedDigit()
             }
         }
     }

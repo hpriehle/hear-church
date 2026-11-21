@@ -119,8 +119,9 @@ class MicSource(Source):
         self.native_sr = dev["samplerate"]
         self.label = f"input: {dev['name']}"
         self.warning: str | None = None  # short sentence for the operator while the mic is not delivering sound
-        self._q: queue.Queue = queue.Queue(maxsize=500)
+        self._q: queue.Queue = queue.Queue(maxsize=2500)
         self._stop = threading.Event()
+        self.tap: Callable[[np.ndarray, int], None] | None = None   # Live English: the same audio, at the device's rate
         self._stream = None
         self._stream_dead = False
 
@@ -131,6 +132,11 @@ class MicSource(Source):
             mono = indata[:, self.channel - 1].copy()
         else:
             mono = indata.mean(axis=1) if indata.shape[1] > 1 else indata[:, 0].copy()
+        if self.tap:
+            try:
+                self.tap(mono, self.native_sr)
+            except Exception as e:  # Live English must never stop the translation's capture
+                log.debug("live english tap: %s", e)
         try:
             self._q.put_nowait((mono.astype(np.float32), time.monotonic()))
         except queue.Full:
@@ -145,9 +151,10 @@ class MicSource(Source):
         # To read input channel N we must open N channels; otherwise mix down up to 2.
         channels = min(self.device["channels"], self.channel) if self.channel else min(self.device["channels"], 2)
         self._stream_dead = False
+        # 10 ms blocks: Live English passes them straight on to phones (larger ones would arrive in bursts)
         stream = sd.InputStream(device=self.device["index"], channels=channels,
                                 samplerate=self.native_sr, dtype="float32",
-                                blocksize=int(self.native_sr * 0.05), callback=self._callback,
+                                blocksize=int(self.native_sr * 0.01), callback=self._callback,
                                 finished_callback=self._finished)
         stream.start()
         self._stream = stream

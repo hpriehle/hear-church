@@ -23,12 +23,12 @@ datas = [
 ]
 datas += [(str(p), ".") for p in sorted(REPO.glob("glossary*.json"))]
 binaries = []
-hiddenimports = collect_submodules("app") + collect_submodules("uvicorn")
+hiddenimports = collect_submodules("app") + collect_submodules("live") + collect_submodules("uvicorn")
 
 # Packages with native libraries or data files PyInstaller's own hooks may miss.
 for pkg in ("faster_whisper", "ctranslate2", "onnxruntime", "piper", "sounddevice", "_sounddevice_data", "soxr",
             "lameenc", "av", "unicode_rbnf", "sentence_stream", "segno", "certifi", "tokenizers", "huggingface_hub",
-            "anthropic", "stripe", "websockets", "httptools", "watchfiles", "hf_xet", "tzdata"):
+            "anthropic", "stripe", "zeroconf", "ifaddr", "websockets", "httptools", "watchfiles", "hf_xet", "tzdata"):
     try:
         d, b, h = collect_all(pkg)
     except Exception:

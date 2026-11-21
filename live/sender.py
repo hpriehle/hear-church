@@ -190,6 +190,28 @@ class DeviceSource(Source):
         self._stream.close()
 
 
+class TapSource(Source):
+    """Audio pushed in by the meeting engine (its own capture of the room input), at the device's rate."""
+
+    def __init__(self):
+        super().__init__()
+        self._rs = None
+        self._sr = 0
+        self._buf = np.zeros(0, np.int16)
+
+    def push(self, mono: np.ndarray, sr: int) -> None:
+        """float32 mono samples in -1..1; called from the capture thread, so it only resamples and queues."""
+        import soxr
+        if sr != self._sr:  # first block, or the device reopened at another rate
+            self._rs, self._sr = soxr.ResampleStream(sr, P.SAMPLE_RATE, 1, dtype="float32", quality="LQ"), sr
+        x = self._rs.resample_chunk(mono) if sr != P.SAMPLE_RATE else mono
+        pcm = (np.clip(x, -1, 1) * 32767).astype(np.int16)
+        self._buf = np.concatenate([self._buf, pcm])
+        while len(self._buf) >= P.FRAME_SAMPLES:
+            self._put(self._buf[:P.FRAME_SAMPLES].copy())
+            self._buf = self._buf[P.FRAME_SAMPLES:]
+
+
 def list_devices() -> list[tuple[int, str, str, int]]:
     import sounddevice as sd
     out = []

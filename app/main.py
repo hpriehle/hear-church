@@ -46,7 +46,7 @@ log = logging.getLogger("app")
 
 AUDIO_EXT = {".mp3", ".wav", ".m4a", ".aac", ".flac", ".ogg", ".mp4", ".mov"}
 EDITABLE = {
-    "audio": {"input_device", "input_channel", "input_gain"},
+    "audio": {"input_device", "input_channel", "input_gain", "live_english"},
     "translate": {"mode", "claude_model", "claude_effort", "claude_timeout_s", "ollama_model", "claude_session_turns"},
     "tts": {"engine", "voice", "rate", "volume", "speed"},
     "backlog": {"speedup_start_s", "speedup_full_s", "max_speed", "condense_on_s", "condense_off_s", "drop_above_s"},
@@ -281,6 +281,7 @@ def full_status() -> dict[str, Any]:
         "sharing": S.settings.server.sharing,
         # The microphone of the running meeting: null when no microphone is in use / all is well.
         **S.pipeline.mic_info(),
+        "live_english": S.pipeline.live_english(),
         # Where the engine listens. Turning local sharing on or off only takes effect after an engine restart.
         "listening_on": S.bind_host or None,
         "restart_required": bool(S.app_mode and S.bind_host and

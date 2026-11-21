@@ -109,6 +109,15 @@ public sealed class AppModel
         return Listeners == 0 ? 0 : null;
     }
 
+    /// <summary>Live English (free): the meeting's input also goes to phones on this Wi-Fi. Kept by the engine on this PC.</summary>
+    public bool LiveEnglish => Engine.Settings?.Settings.Audio.LiveEnglish ?? Engine.Status?.LiveEnglish?.On ?? false;
+
+    public async Task SetLiveEnglish(bool on)
+    {
+        await Engine.Set(new JsonObject { ["audio"] = new JsonObject { ["live_english"] = on } });
+        if (on && await Firewall.Allow(live: true) is { } why) { Message = why; Emit(); }   // once: Windows asks (UAC)
+    }
+
     public async Task SetSharing(bool local)
     {
         await Engine.Set(new JsonObject { ["server"] = new JsonObject { ["sharing"] = local ? "local" : "cloud" } });

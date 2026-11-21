@@ -97,6 +97,7 @@ class AudioCfg(BaseModel):
     input_device: str = ""
     input_channel: int = 0
     input_gain: float = 1.0
+    live_english: bool = False   # send this input to phones on the Wi-Fi as well (live/), free
 
 
 class VadCfg(BaseModel):

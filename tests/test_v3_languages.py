@@ -290,10 +290,14 @@ def test_session_start_carries_speakers_and_targets(monkeypatch):
         await asyncio.sleep(0.6)
         pipe.speakers = ["ru", "lv", "en"]
         await asyncio.sleep(0.6)
+        pipe.live = ("sender", None)   # Live English turned on during the meeting
+        await asyncio.sleep(0.6)
         task.cancel()
     asyncio.run(one_turn())
     start = sent[0]
     assert start["type"] == "session_start" and start["languages"] == start["targets"] == ["en", "lv"]
     assert start["speakers"] == ["ru", "lv"] and start["speaker"] == "ru" and start["passthrough"]
+    assert start["live_english"] is False
     assert sent[1] == {"type": "languages", "languages": ["en", "lv"], "targets": ["en", "lv"],
-                       "speakers": ["ru", "lv", "en"]}
+                       "speakers": ["ru", "lv", "en"], "live_english": False}
+    assert sent[2]["type"] == "languages" and sent[2]["live_english"] is True

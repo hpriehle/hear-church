@@ -1392,6 +1392,7 @@ def _entry(c: dict[str, Any], now: float) -> dict[str, Any]:
     soon = bool(nm and nm["starts"] and 0 <= nm["starts"] - now <= SOON_S)
     return {"slug": c["slug"], "name": c["name"], "title": display_name(c), "city": c["city"], "church": c["church"],
             "unit_type": c["unit_type"], "stake": c["stake"], "lat": c["lat"], "lng": c["lng"], "live": s is not None,
+            "live_english": bool(s and s.live_english),
             "starts_soon": soon and s is None, "languages": s.languages_public() if s else [],
             "starts_at": s.started if s else (nm["starts"] if nm else None),
             "next_meeting": {k: nm[k] for k in ("label", "day", "time")} if nm else None}
@@ -1435,6 +1436,7 @@ async def congregation_info(slug: str):
     c = _congregation(slug)
     s = h.live.get(c["id"])
     return {**_public(c), "live": s is not None, "languages": s.languages_public() if s else [],
+            "live_english": bool(s and s.live_english),
             "next_meeting": next_meeting(c["meeting_times"], c["timezone"])}
 
 

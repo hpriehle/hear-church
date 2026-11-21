@@ -26,17 +26,23 @@
 	<string>public.app-category.productivity</string>
 	<key>LSMinimumSystemVersion</key>
 	<string>14.0</string>
+	<key>NSBonjourServices</key>
+	<array>
+		<string>_hearchurch-live._udp</string>
+	</array>
 	<key>NSAppTransportSecurity</key>
 	<dict>
 		<key>NSAllowsLocalNetworking</key>
 		<true/>
 	</dict>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>With Live English on, phones on this Wi-Fi hear the room audio from this Mac.</string>
 	<key>NSLocationUsageDescription</key>
 	<string>Used once, if you ask, to place your building on the map. Only the building's location is saved.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>Used once, if you ask, to place your building on the map. Only the building's location is saved.</string>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>Hear Church listens to the meeting through this microphone and translates it for listeners' phones. The sound itself never leaves this Mac.</string>
+	<string>Hear Church listens to the meeting through this microphone and translates it for listeners' phones. The sound itself never leaves this Mac, unless you turn on Live English for phones on this Wi-Fi.</string>
 	<key>SUAutomaticallyUpdate</key>
 	<true/>
 	<key>SUEnableAutomaticChecks</key>

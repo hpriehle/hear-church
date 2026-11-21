@@ -131,3 +131,46 @@ def test_listener_plays_tone_end_to_end():
     finally:
         L.stop()
         sender.stop()
+
+
+def test_tap_source_turns_device_blocks_into_48k_frames():
+    from live.sender import TapSource
+    src = TapSource()
+    t = np.arange(441 * 100) / 44100
+    x = (np.sin(2 * np.pi * 440 * t) * 0.5).astype(np.float32)
+    for i in range(100):  # 1 s of 10 ms blocks from a 44.1 kHz input
+        src.push(x[i * 441:(i + 1) * 441], 44100)
+    frames = [src.frames.get_nowait()[0] for _ in range(src.frames.qsize())]
+    assert 190 <= len(frames) <= 200 and all(f.dtype == np.int16 and len(f) == 240 for f in frames)
+    assert np.abs(np.concatenate(frames[20:])).max() > 10000
+
+
+def test_meeting_sends_its_input_while_live_english_is_on(monkeypatch):
+    from types import SimpleNamespace
+
+    import live.sender as S
+    from app.audio_in import MicSource
+    from app.pipeline import Pipeline
+
+    monkeypatch.setattr(S, "LiveSender", lambda src, _real=S.LiveSender: _real(src, port=0, bind="127.0.0.1"))
+    monkeypatch.setattr(S, "advertise", lambda *a: None)   # no Bonjour from a test
+    mic = MicSource.__new__(MicSource)
+    mic.tap = None
+    p = Pipeline.__new__(Pipeline)
+    p.settings = SimpleNamespace(audio=SimpleNamespace(live_english=True), engine=SimpleNamespace(name="Test"))
+    p.worker, p.capturing = SimpleNamespace(source=mic), True
+    p._sync_live()
+    try:
+        assert p.live is not None and mic.tap is not None
+        c = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        c.settimeout(2)
+        _subscribe(c, p.live[0].port)
+        assert P.unpack(c.recvfrom(2048)[0]).type == P.PacketType.HELLO
+        mic.tap(np.full(480, 0.3, np.float32), 48000)   # what the microphone callback hands on
+        assert P.unpack(c.recvfrom(2048)[0]).type == P.PacketType.AUDIO
+        assert p.live_english() == {"on": True, "sending": True, "listeners": 1}
+        c.close()
+    finally:
+        p.settings.audio.live_english = False   # toggle off: stops, and the input is no longer tapped
+        p._sync_live()
+    assert p.live is None and mic.tap is None

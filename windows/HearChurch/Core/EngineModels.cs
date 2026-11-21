@@ -120,6 +120,15 @@ public sealed class EngineStatus
     public List<string>? AutoSpeakers { get; set; }
     public string? MicWarning { get; set; }
     public string? MicName { get; set; }
+    /// <summary>Live English: the room audio to phones on this Wi-Fi; engines before it don't send it.</summary>
+    public LiveEnglishInfo? LiveEnglish { get; set; }
+
+    public sealed class LiveEnglishInfo
+    {
+        public bool On { get; set; }
+        public bool Sending { get; set; }
+        public int Listeners { get; set; }
+    }
 }
 
 public sealed class PackageStatus
@@ -146,6 +155,7 @@ public sealed class EngineSettings
             public string InputDevice { get; set; } = "";
             public int InputChannel { get; set; }
             public double InputGain { get; set; } = 1;
+            public bool? LiveEnglish { get; set; }
         }
         public sealed class ServerInfo { public string? Sharing { get; set; } }
         public sealed class TtsInfo
@@ -194,7 +204,7 @@ public sealed class EngineSettings
     /// <summary>Every voice, downloaded or not, so they can be heard.</summary>
     public Dictionary<string, List<VoiceOption>> VoiceCatalog { get; set; } = new();
 
-    public string Key => $"{Settings.Audio.InputDevice}|{Settings.Audio.InputChannel}|{Settings.Audio.InputGain}|{Settings.Server.Sharing}|"
+    public string Key => $"{Settings.Audio.InputDevice}|{Settings.Audio.InputChannel}|{Settings.Audio.InputGain}|{Settings.Audio.LiveEnglish}|{Settings.Server.Sharing}|"
         + string.Join(",", Devices.Select(d => $"{d.Name}:{d.Channels}:{d.Default}")) + "|" + VoiceKey
         + $"|{Settings.Tts.Volume}|{Settings.Tts.Speed}|{Settings.Translate.ClaudeModel}|"
         + string.Join(",", Settings.Voices.OrderBy(v => v.Key).Select(v => $"{v.Key}:{v.Value.Speed}"));

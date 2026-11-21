@@ -281,6 +281,7 @@ public sealed class MainView : Grid
         var p = new StackPanel { Spacing = 18, Padding = new Thickness(16) };
         p.Children.Add(Slot(() => _model.Message ?? "", () => _model.Message is { } m ? Ui.T(m, Ui.Callout, Ui.Red) : null));
         p.Children.Add(Slot(ChecksKey, () => _model.Running ? DuringMeeting() : BeforeMeeting()));
+        p.Children.Add(Slot(LiveEnglishKey, LiveEnglishToggle));
         p.Children.Add(Slot(SoundKey, () => SoundSection(_model, compactGain: false)));
         p.Children.Add(Slot(() => _model.Running.ToString(), () =>
         {
@@ -298,6 +299,22 @@ public sealed class MainView : Grid
         SetRow(listeners, 2);
         g.Children.Add(listeners);
         return g;
+    }
+
+    private string LiveEnglishKey() =>
+        $"{_model.LiveEnglish}|{_model.Running}|{_model.Engine.Status?.LiveEnglish?.Sending}|{_model.Engine.Status?.LiveEnglish?.Listeners}";
+
+    /// <summary>Live English: the room audio, as it comes in, to phones on this Wi-Fi (free).</summary>
+    private UIElement LiveEnglishToggle()
+    {
+        var s = new StackPanel { Spacing = 4 };
+        var t = new ToggleSwitch { Header = "Live English", IsOn = _model.LiveEnglish };
+        t.Toggled += (_, _) => { if (t.IsOn != _model.LiveEnglish) _ = _model.SetLiveEnglish(t.IsOn); };
+        s.Children.Add(t);
+        s.Children.Add(Ui.T("Phones on this Wi-Fi hear the room audio, free", Ui.Callout, Ui.Secondary));
+        if (_model.Running && _model.Engine.Status?.LiveEnglish is { Sending: true } live)
+            s.Children.Add(Ui.T($"{live.Listeners} {(live.Listeners == 1 ? "phone" : "phones")} listening", Ui.Callout));
+        return s;
     }
 
     private string ChecksKey()

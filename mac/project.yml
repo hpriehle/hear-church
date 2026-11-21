@@ -33,9 +33,13 @@ targets:
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         LSMinimumSystemVersion: "14.0"
         LSApplicationCategoryType: public.app-category.productivity
-        NSMicrophoneUsageDescription: Hear Church listens to the meeting through this microphone and translates it for listeners' phones. The sound itself never leaves this Mac.
+        NSMicrophoneUsageDescription: Hear Church listens to the meeting through this microphone and translates it for listeners' phones. The sound itself never leaves this Mac, unless you turn on Live English for phones on this Wi-Fi.
         NSLocationUsageDescription: Used once, if you ask, to place your building on the map. Only the building's location is saved.
         NSLocationWhenInUseUsageDescription: Used once, if you ask, to place your building on the map. Only the building's location is saved.
+        # Live English: the room audio goes to phones on this Wi-Fi, which find this Mac by Bonjour.
+        NSLocalNetworkUsageDescription: With Live English on, phones on this Wi-Fi hear the room audio from this Mac.
+        NSBonjourServices:
+          - _hearchurch-live._udp
         CFBundleIconName: AppIcon
         NSAppTransportSecurity:
           NSAllowsLocalNetworking: true

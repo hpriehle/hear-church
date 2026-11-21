@@ -444,6 +444,11 @@ def _activity():
     return talk if talk is not None and not p.running else p
 
 
+def _live_english(a) -> bool:
+    """Is this meeting's room audio going out to phones on the Wi-Fi (Live English)? Free: never metered."""
+    return getattr(a, "live", None) is not None
+
+
 def _is_talk(a) -> bool:
     return a is not _m().S.pipeline
 
@@ -464,6 +469,7 @@ class PublishClient(EngineClient):
         self.session_code = ""            # the hub's code for the running session, for resuming after a drop
         self.refused_run = 0.0            # started_at of a meeting the hub refused (not asked again)
         self._offered: list[str] = []
+        self._live = False                # Live English was on when last told to the hub
         self._speakers: list[str] = []
         self.notice = ""                  # the hub's last refusal / ending of our session, for the operator page
         self.listeners = {"stream": 0, "captions": 0}  # phones on the hub, as it reports them
@@ -747,12 +753,12 @@ class PublishClient(EngineClient):
                 self._send({"type": "session_stop"})
                 self.announced, self.running, self.session_code, self.heard = False, False, "", set()
             elif p.running and not self.announced and p.started_at != self.refused_run:
-                self._offered, self._speakers = list(p.on_channels), self._speaker_set()
+                self._offered, self._speakers, self._live = list(p.on_channels), self._speaker_set(), _live_english(p)
                 self.announced, self.private = True, local
                 # docs/v3-languages.md: "languages" (= targets) and "speaker" are what hubs before V3.2 read.
                 start = {"type": "session_start", "languages": self._offered, "resume": self.session_code,
                          "targets": self._offered, "speakers": self._speakers, "speaker": self._legacy_speaker(),
-                         "passthrough": True}
+                         "passthrough": True, "live_english": self._live}
                 if local:
                     start["private"] = True
                 self._send(start)
@@ -760,10 +766,11 @@ class PublishClient(EngineClient):
                 self._send({"type": "session_stop"})
                 self.announced, self.running, self.session_code = False, False, ""
                 log.info("meeting over: session stopped on %s", urlparse(self.url).hostname)
-            elif self.announced and (list(p.on_channels) != self._offered or self._speaker_set() != self._speakers):
-                self._offered, self._speakers = list(p.on_channels), self._speaker_set()
+            elif self.announced and (list(p.on_channels) != self._offered or self._speaker_set() != self._speakers
+                                     or _live_english(p) != self._live):
+                self._offered, self._speakers, self._live = list(p.on_channels), self._speaker_set(), _live_english(p)
                 self._send({"type": "languages", "languages": self._offered, "targets": self._offered,
-                            "speakers": self._speakers})
+                            "speakers": self._speakers, "live_english": self._live})
 
     @staticmethod
     def _speaker_set() -> list[str]:

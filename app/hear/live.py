@@ -11,8 +11,9 @@ An engine (the congregation's Mac) connects to /ws/engine with "Authorization: B
                      private?}   targets (V3, else languages) = the ones offered = the listen pills, in that order;
                      speakers = the languages spoken at the microphone; passthrough (V3) = a listener in a speaker
                      language gets the original (never "listen in the room"); resume = the session code from an
-                     earlier "session_started" (reconnect within the grace); private = a "this Wi-Fi only" meeting
-                 {"type": "languages", languages, targets?, speakers?}   (changed during the meeting)
+                     earlier "session_started" (reconnect within the grace); private = a "this Wi-Fi only" meeting;
+                     live_english = the computer sends the room audio to phones on its Wi-Fi (free, never metered)
+                 {"type": "languages", languages, targets?, speakers?, live_english?}   (changed during the meeting)
                  {"type": "hub", lang, msg, remember}  (a caption etc. for that language's listeners)
                  binary: one byte = index into hello.languages, then MP3 bytes
                  {"type": "session_stop"}
@@ -103,6 +104,7 @@ class LiveSession:
         self.speaker = "en"   # the speaker's language: the phones in that language are told to listen in the room
         self.speakers: list[str] = []   # V3: every language spoken at the microphone
         self.passthrough = False        # V3: phones in a speaker language get the original, never paused
+        self.live_english = False       # the computer streams the room audio on its Wi-Fi: phones may offer it
         self.started = time.time()
         self.grace = None  # timer handle while the engine is away
         self.hubs = {c: Hub(f"live-{self.slug}-{c}", history=300, queue_size=400) for c in all_langs}
@@ -222,6 +224,8 @@ class Live:
             if self._set_speakers(s, m):
                 self._announce_speaker(s)
             self._set_offered(s, [c for c in _targets(m) if c in s.hubs])
+            if "live_english" in m:
+                s.live_english = bool(m["live_english"])
         elif t == "session_stop" and link.session:
             self.end(link.session, notify=False)
         elif t == "hub" and link.session and not link.session.private:
@@ -254,6 +258,7 @@ class Live:
                 old.speaker = str(m.get("speaker") or old.speaker)[:8]
                 self._set_speakers(old, m)
                 old.passthrough = bool(m.get("passthrough"))
+                old.live_english = bool(m.get("live_english"))
                 self._resume(old, link, offered)
                 return
             if old.link is None and same:
@@ -277,6 +282,7 @@ class Live:
         s.speaker = str(m.get("speaker") or "en")[:8]
         self._set_speakers(s, m)
         s.passthrough = bool(m.get("passthrough"))
+        s.live_english = bool(m.get("live_english"))
         s.private = bool(m.get("private"))
         self.sessions[cong["id"]] = s
         link.session = s
