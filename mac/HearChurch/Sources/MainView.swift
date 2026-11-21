@@ -233,7 +233,7 @@ private struct LiveEnglishToggle: View {
                 Task { await model.setLiveEnglish(on) }
             }))
             .toggleStyle(.switch)
-            Text("Phones on this Wi-Fi hear the room audio, free").font(.callout).foregroundStyle(.secondary)
+            Text("Phones on this Wi-Fi hear the room audio").font(.callout).foregroundStyle(.secondary)
             if model.running, let live = model.engine.status?.live_english, live.sending {
                 Label("\(live.listeners) \(live.listeners == 1 ? "phone" : "phones") listening", systemImage: "wifi")
                     .font(.callout).monospacedDigit()

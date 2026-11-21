@@ -311,7 +311,7 @@ public sealed class MainView : Grid
         var t = new ToggleSwitch { Header = "Live English", IsOn = _model.LiveEnglish };
         t.Toggled += (_, _) => { if (t.IsOn != _model.LiveEnglish) _ = _model.SetLiveEnglish(t.IsOn); };
         s.Children.Add(t);
-        s.Children.Add(Ui.T("Phones on this Wi-Fi hear the room audio, free", Ui.Callout, Ui.Secondary));
+        s.Children.Add(Ui.T("Phones on this Wi-Fi hear the room audio", Ui.Callout, Ui.Secondary));
         if (_model.Running && _model.Engine.Status?.LiveEnglish is { Sending: true } live)
             s.Children.Add(Ui.T($"{live.Listeners} {(live.Listeners == 1 ? "phone" : "phones")} listening", Ui.Callout));
         return s;
