@@ -133,16 +133,21 @@ def test_listener_plays_tone_end_to_end():
         sender.stop()
 
 
-def test_tap_source_turns_device_blocks_into_48k_frames():
+def test_tap_source_turns_device_blocks_into_paced_48k_frames():
     from live.sender import TapSource
     src = TapSource()
-    t = np.arange(441 * 100) / 44100
+    t = np.arange(2205 * 20) / 44100
     x = (np.sin(2 * np.pi * 440 * t) * 0.5).astype(np.float32)
-    for i in range(100):  # 1 s of 10 ms blocks from a 44.1 kHz input
-        src.push(x[i * 441:(i + 1) * 441], 44100)
-    frames = [src.frames.get_nowait()[0] for _ in range(src.frames.qsize())]
-    assert 190 <= len(frames) <= 200 and all(f.dtype == np.int16 and len(f) == 240 for f in frames)
-    assert np.abs(np.concatenate(frames[20:])).max() > 10000
+    first = src.next_frame()
+    assert not first.any()                                    # nothing yet: silence, never a gap
+    for i in range(20):  # 1 s of 50 ms blocks from a 44.1 kHz input, all at once (the paced thread drains them)
+        src.push(x[i * 2205:(i + 1) * 2205], 44100)
+    f = src.next_frame()
+    assert f.dtype == np.int16 and len(f) == 240 and np.abs(f).max() > 10000   # one 5 ms frame per call
+    assert len(src._buf) == (src.PREBUFFER - 1) * 240         # a burst beyond MAX skips to the newest audio
+    while src._primed:
+        src.next_frame()
+    assert not src.next_frame().any()                         # ran dry: silence until refilled
 
 
 def test_meeting_sends_its_input_while_live_english_is_on(monkeypatch):
@@ -166,7 +171,7 @@ def test_meeting_sends_its_input_while_live_english_is_on(monkeypatch):
         c.settimeout(2)
         _subscribe(c, p.live[0].port)
         assert P.unpack(c.recvfrom(2048)[0]).type == P.PacketType.HELLO
-        mic.tap(np.full(480, 0.3, np.float32), 48000)   # what the microphone callback hands on
+        mic.tap(np.full(2400, 0.3, np.float32), 48000)  # what the microphone callback hands on (50 ms)
         assert P.unpack(c.recvfrom(2048)[0]).type == P.PacketType.AUDIO
         assert p.live_english() == {"on": True, "sending": True, "listeners": 1}
         c.close()
@@ -174,3 +179,33 @@ def test_meeting_sends_its_input_while_live_english_is_on(monkeypatch):
         p.settings.audio.live_english = False   # toggle off: stops, and the input is no longer tapped
         p._sync_live()
     assert p.live is None and mic.tap is None
+
+
+def test_announced_addresses_are_the_lan_not_loopback_or_tailscale(monkeypatch):
+    from types import SimpleNamespace
+
+    import ifaddr
+
+    import live.sender as S
+
+    ips = ["127.0.0.1", "100.94.10.36", "169.254.21.172", "192.168.1.207", "10.0.0.5", ("fe80::1", 0, 0)]
+    monkeypatch.setattr(ifaddr, "get_adapters", lambda: [SimpleNamespace(ips=[SimpleNamespace(ip=i) for i in ips])])
+    assert S.lan_addresses("192.168.1.207") == ["192.168.1.207", "10.0.0.5"]
+    assert S.lan_addresses("127.0.0.1") == ["192.168.1.207", "10.0.0.5"]   # no default route: still the LAN
+
+
+def test_sender_answers_phones_on_ipv6_and_ipv4():
+    if not socket.has_dualstack_ipv6():
+        pytest.skip("no dual-stack sockets here")
+    sender = LiveSender(ToneSource(), port=0)   # the default: every address, as in a meeting
+    sender.start()
+    try:
+        for family, host in ((socket.AF_INET6, "::1"), (socket.AF_INET, "127.0.0.1")):
+            c = socket.socket(family, socket.SOCK_DGRAM)
+            c.settimeout(2)
+            c.sendto(P.pack(P.Packet(P.PacketType.SUBSCRIBE)), (host, sender.port))
+            assert P.unpack(c.recvfrom(2048)[0]).type == P.PacketType.HELLO
+            c.close()
+        assert sender.listener_count() == 2
+    finally:
+        sender.stop()

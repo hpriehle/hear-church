@@ -131,6 +131,7 @@ def test_mic_watchdog_warns_reopens_the_same_device_and_clears(monkeypatch):
     src.device = {"index": 3, "name": "USB Audio", "channels": 1, "samplerate": 16000, "default": False}
     src.warning, src._q, src._stop = None, queue.Queue(), threading.Event()
     src._stream, src._stream_dead = None, False
+    src._switch_to, src.tap = None, None
     src.STALL_S, src.RETRY_S = 0.3, 0.1
     opened = []
 
@@ -166,8 +167,33 @@ def test_mic_watchdog_warns_reopens_the_same_device_and_clears(monkeypatch):
     assert wait(lambda: opened == [3, 3])
     src._q.put((np.zeros(800, dtype=np.float32), time.monotonic()))
     assert wait(lambda: src.warning is None)
+    src.switch("AirPods", 0)                             # the operator picks another input mid-meeting
+    assert wait(lambda: opened == [3, 3, 9]) and src.name == "AirPods" and src.wanted == ("AirPods", 0)
+    got.clear()
+    src._q.put((np.zeros(800, dtype=np.float32), time.monotonic()))
+    assert wait(lambda: got) and t.is_alive()            # same capture, same meeting
     src.stop()
     t.join(2)
+
+
+def test_changing_the_input_during_a_meeting_switches_the_capture():
+    from app.config import Settings
+    from app.pipeline import Pipeline
+
+    p = Pipeline.__new__(Pipeline)
+    p.settings = Settings()
+    src = audio_in.MicSource.__new__(audio_in.MicSource)
+    src._switch_to = None
+    p.worker = SimpleNamespace(source=src)
+    new = p.settings.model_copy(deep=True)
+    new.audio.input_gain = 2.0
+    p._switch_input(new)
+    p.settings = new
+    assert src._switch_to is None                        # other settings leave the input alone
+    new = p.settings.model_copy(deep=True)
+    new.audio.input_device = "AirPods"
+    p._switch_input(new)
+    assert src._switch_to == ("AirPods", 0)
 
 
 def test_mic_info_in_status():

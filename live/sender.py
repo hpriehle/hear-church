@@ -19,6 +19,7 @@ import socket
 import sys
 import threading
 import time
+from collections import deque
 from dataclasses import dataclass, field
 
 import numpy as np
@@ -190,26 +191,43 @@ class DeviceSource(Source):
         self._stream.close()
 
 
-class TapSource(Source):
-    """Audio pushed in by the meeting engine (its own capture of the room input), at the device's rate."""
+class TapSource(PacedSource):
+    """Audio pushed in by the meeting engine (its own capture of the room input, 50 ms blocks at the device's rate),
+    sent on as one 5 ms frame every 5 ms: phones buffer ~15 ms, so 50 ms bursts would break up. The engine's capture
+    keeps its 50 ms blocks because 10 ms ones lose audio while Python is busy (4-9% on a MacBook, 2026-11-21)."""
+
+    PREBUFFER = 12   # frames (60 ms): one 50 ms block plus slack, so the steady 5 ms clock never runs dry
+    MAX = 40         # frames: more queued (a stall, or the device's clock running fast) and we skip to the newest
 
     def __init__(self):
         super().__init__()
+        self._in: deque[tuple[np.ndarray, int]] = deque(maxlen=100)
         self._rs = None
         self._sr = 0
         self._buf = np.zeros(0, np.int16)
+        self._primed = False
 
     def push(self, mono: np.ndarray, sr: int) -> None:
-        """float32 mono samples in -1..1; called from the capture thread, so it only resamples and queues."""
+        """float32 mono samples in -1..1; called from the capture callback, so it only queues them."""
+        self._in.append((mono, sr))
+
+    def next_frame(self) -> np.ndarray:
         import soxr
-        if sr != self._sr:  # first block, or the device reopened at another rate
-            self._rs, self._sr = soxr.ResampleStream(sr, P.SAMPLE_RATE, 1, dtype="float32", quality="LQ"), sr
-        x = self._rs.resample_chunk(mono) if sr != P.SAMPLE_RATE else mono
-        pcm = (np.clip(x, -1, 1) * 32767).astype(np.int16)
-        self._buf = np.concatenate([self._buf, pcm])
-        while len(self._buf) >= P.FRAME_SAMPLES:
-            self._put(self._buf[:P.FRAME_SAMPLES].copy())
-            self._buf = self._buf[P.FRAME_SAMPLES:]
+        while self._in:
+            mono, sr = self._in.popleft()
+            if sr != self._sr:  # first block, or the device reopened at another rate
+                self._rs, self._sr = soxr.ResampleStream(sr, P.SAMPLE_RATE, 1, dtype="float32", quality="LQ"), sr
+            x = self._rs.resample_chunk(mono) if sr != P.SAMPLE_RATE else mono
+            self._buf = np.concatenate([self._buf, (np.clip(x, -1, 1) * 32767).astype(np.int16)])
+        n = P.FRAME_SAMPLES
+        if len(self._buf) > self.MAX * n:
+            self._buf = self._buf[-self.PREBUFFER * n:]
+        if len(self._buf) >= (n if self._primed else self.PREBUFFER * n):
+            self._primed = True
+            out, self._buf = self._buf[:n], self._buf[n:]
+            return out
+        self._primed = False   # ran dry: silence until a full prebuffer is back
+        return np.zeros(n, np.int16)
 
 
 def list_devices() -> list[tuple[int, str, str, int]]:
@@ -260,7 +278,13 @@ class LiveSender:
         self.redundancy = redundancy
         self.encoder = Encoder(bitrate)
         self.clock = clock
-        self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        if bind == "0.0.0.0" and socket.has_dualstack_ipv6():
+            # IPv6 too: a Mac's Bonjour also gives phones its IPv6 addresses, and iOS tries those first
+            self.sock = socket.socket(socket.AF_INET6, socket.SOCK_DGRAM)
+            self.sock.setsockopt(socket.IPPROTO_IPV6, socket.IPV6_V6ONLY, 0)
+            bind = "::"
+        else:
+            self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.sock.setsockopt(socket.SOL_SOCKET, socket.SO_SNDBUF, 1 << 20)
         self.sock.bind((bind, port))
         self.port = self.sock.getsockname()[1]
@@ -285,7 +309,7 @@ class LiveSender:
                 if addr not in self.subscribers and len(self.subscribers) >= MAX_LISTENERS:
                     return
                 if addr not in self.subscribers:
-                    log.info("listener joined %s:%d", *addr)
+                    log.info("listener joined %s:%d", addr[0], addr[1])
                 self.subscribers[addr] = now
                 n = len(self.subscribers)
             self._send(P.Packet(P.PacketType.HELLO, self.channel,
@@ -293,7 +317,7 @@ class LiveSender:
         elif p.type == P.PacketType.UNSUBSCRIBE:
             with self._lock:
                 if self.subscribers.pop(addr, None) is not None:
-                    log.info("listener left %s:%d", *addr)
+                    log.info("listener left %s:%d", addr[0], addr[1])
         elif p.type == P.PacketType.PING:
             self._send(P.Packet(P.PacketType.PONG, self.channel, payload=p.payload[:64]), addr)
 
@@ -302,7 +326,7 @@ class LiveSender:
         with self._lock:
             for addr in [a for a, t in self.subscribers.items() if t < cutoff]:
                 del self.subscribers[addr]
-                log.info("listener timed out %s:%d", *addr)
+                log.info("listener timed out %s:%d", addr[0], addr[1])
 
     def _recv_loop(self) -> None:
         while not self._stop.is_set():
@@ -391,16 +415,38 @@ def local_ip() -> str:
         s.close()
 
 
+def lan_addresses(ip: str) -> list[str]:
+    """IPv4 addresses phones on the Wi-Fi can reach: the default route's first, never loopback, link-local or
+    Tailscale (100.64.0.0/10)."""
+    import ipaddress
+
+    import ifaddr  # comes with zeroconf
+    found = [ip] + [a.ip for ad in ifaddr.get_adapters() for a in ad.ips if isinstance(a.ip, str)]
+    out = []
+    for a in found:
+        x = ipaddress.ip_address(a)
+        if not (x.is_loopback or x.is_link_local or x in ipaddress.ip_network("100.64.0.0/10")) and a not in out:
+            out.append(a)
+    return out
+
+
 def advertise(name: str, ip: str, port: int):
-    """Advertise over mDNS/Bonjour if zeroconf is installed. Returns a closer or None."""
+    """Advertise over mDNS/Bonjour. Returns a closer or None."""
+    if sys.platform == "darwin":
+        return _advertise_mac(name, port)
     try:
         from zeroconf import ServiceInfo, Zeroconf
     except ImportError:
         log.info("zeroconf not installed: phones need the IP address (%s:%d)", ip, port)
         return None
-    info = ServiceInfo(P.MDNS_TYPE, f"{name}.{P.MDNS_TYPE}", addresses=[socket.inet_aton(ip)],
+    addrs = lan_addresses(ip)
+    if not addrs:
+        log.warning("mDNS: no network address phones could reach (only %s)", ip)
+        return None
+    # One address (the default route's): phones may try only the first, and bridges (Docker, Hyper-V) can't be reached
+    info = ServiceInfo(P.MDNS_TYPE, f"{name}.{P.MDNS_TYPE}", addresses=[socket.inet_aton(addrs[0])],
                        port=port, properties={"v": str(P.VERSION), "ch": "en"})
-    zc = Zeroconf()
+    zc = Zeroconf(interfaces=addrs)
     try:
         zc.register_service(info)
     except Exception as e:
@@ -412,6 +458,22 @@ def advertise(name: str, ip: str, port: int):
         zc.unregister_service(info)
         zc.close()
     return close
+
+
+def _advertise_mac(name: str, port: int):
+    """Through the Mac's own Bonjour (mDNSResponder): it announces on every network with the right address. The app
+    may not send multicast itself (Local Network: DenyMulticast), so zeroconf only reached lo0 (2026-11-21).
+    The registration ends when this process does."""
+    import ctypes
+    lib = ctypes.CDLL("/usr/lib/libSystem.B.dylib")
+    ref = ctypes.c_void_p()
+    txt = b"".join(bytes([len(kv)]) + kv for kv in (f"v={P.VERSION}".encode(), b"ch=en"))
+    err = lib.DNSServiceRegister(ctypes.byref(ref), 0, 0, name.encode(), P.MDNS_TYPE.removesuffix(".local.").encode(),
+                                 None, None, ctypes.c_uint16(socket.htons(port)), len(txt), txt, None, None)
+    if err:
+        log.warning("Bonjour advertise failed: error %d", err)
+        return None
+    return lambda: lib.DNSServiceRefDeallocate(ref)
 
 
 # ---------------------------------------------------------------- CLI

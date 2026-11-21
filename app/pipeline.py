@@ -588,7 +588,15 @@ class Pipeline:
     async def say_test(self) -> None:
         await asyncio.gather(*(ch.say_test() for ch in self.on_channels.values()), return_exceptions=True)
 
+    def _switch_input(self, settings: Settings) -> None:
+        """A new input chosen during a meeting: the meeting goes on, on the new input (Live too)."""
+        old, new = self.settings.audio, settings.audio
+        src = self.worker.source if self.worker else None
+        if isinstance(src, MicSource) and (old.input_device, old.input_channel) != (new.input_device, new.input_channel):
+            src.switch(new.input_device, new.input_channel)
+
     def apply_settings(self, settings: Settings, glossaries: dict[str, dict[str, Any]]) -> None:
+        self._switch_input(settings)
         self.settings = settings
         self.glossaries = glossaries
         self.hints = self._hints()

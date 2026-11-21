@@ -119,8 +119,10 @@ class MicSource(Source):
         self.native_sr = dev["samplerate"]
         self.label = f"input: {dev['name']}"
         self.warning: str | None = None  # short sentence for the operator while the mic is not delivering sound
-        self._q: queue.Queue = queue.Queue(maxsize=2500)
+        self._q: queue.Queue = queue.Queue(maxsize=500)
         self._stop = threading.Event()
+        self.wanted = (device_name, channel)   # what the operator chose ("" = the default input)
+        self._switch_to: tuple[str, int] | None = None   # a new choice during the meeting (switch)
         self.tap: Callable[[np.ndarray, int], None] | None = None   # Live English: the same audio, at the device's rate
         self._stream = None
         self._stream_dead = False
@@ -151,14 +153,17 @@ class MicSource(Source):
         # To read input channel N we must open N channels; otherwise mix down up to 2.
         channels = min(self.device["channels"], self.channel) if self.channel else min(self.device["channels"], 2)
         self._stream_dead = False
-        # 10 ms blocks: Live English passes them straight on to phones (larger ones would arrive in bursts)
         stream = sd.InputStream(device=self.device["index"], channels=channels,
                                 samplerate=self.native_sr, dtype="float32",
-                                blocksize=int(self.native_sr * 0.01), callback=self._callback,
+                                blocksize=int(self.native_sr * 0.05), callback=self._callback,
                                 finished_callback=self._finished)
         stream.start()
         self._stream = stream
         _active_streams += 1
+
+    def switch(self, device_name: str, channel: int) -> None:
+        """Listen to another input from now on, without ending the meeting (done in the capture thread)."""
+        self._switch_to = (device_name, channel)
 
     def _close(self) -> None:
         global _active_streams
@@ -209,6 +214,28 @@ class MicSource(Source):
         next_retry = 0.0
         try:
             while not self._stop.is_set():
+                if self._switch_to is not None:
+                    (name, channel), self._switch_to = self._switch_to, None
+                    self._close()
+                    refresh_devices()
+                    dev = resolve_device(name)
+                    if dev is not None:
+                        self.wanted, self.channel = (name, channel), channel
+                        self.device, self.name, self.native_sr = dev, dev["name"], dev["samplerate"]
+                        self.label = f"input: {dev['name']}"
+                    self._q = queue.Queue(maxsize=500)   # blocks from the old input are at its rate
+                    try:
+                        self._open()
+                        self.warning = None
+                        log.info("switched to %s @ %d Hz", self.name, self.native_sr)
+                    except Exception as e:   # the loop below keeps trying to reopen it, as after a drop
+                        log.warning("mic %s: cannot open: %s", self.name, e)
+                        self.warning = (f"The microphone “{self.name}” isn't sending sound. Check it — "
+                                        "translation resumes when it's back.")
+                        next_retry = time.monotonic() + self.RETRY_S
+                    rs = soxr.ResampleStream(self.native_sr, SR, 1, dtype="float32", quality="HQ")
+                    last_audio = time.monotonic()
+                    continue
                 try:
                     block, t = self._q.get(timeout=0.2)
                 except queue.Empty:
