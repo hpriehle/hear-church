@@ -10,6 +10,7 @@ import queue
 import shutil
 import subprocess
 import sys
+import tempfile
 import threading
 import time
 from pathlib import Path
@@ -288,7 +289,10 @@ class FileSource(Source):
         if self.max_s:
             cmd += ["-t", str(self.max_s)]
         cmd += ["-f", "f32le", "-ac", "1", "-ar", str(SR), "pipe:1"]
-        self._proc = subprocess.Popen(cmd, stdout=subprocess.PIPE)
+        # Every handle given explicitly on Windows: the engine's own (redirected) stdin/stderr can't always be
+        # passed on there, and Popen fails with WinError 50. ffmpeg's errors then go to the log.
+        err = tempfile.TemporaryFile() if sys.platform == "win32" else None
+        self._proc = subprocess.Popen(cmd, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=err)
         block = 1600  # 100 ms
         t0 = time.monotonic()
         done = 0
@@ -308,6 +312,12 @@ class FileSource(Source):
             if self._proc.poll() is None:
                 self._proc.kill()
             self._proc.wait()
+            if err is not None:
+                err.seek(0)
+                msg = err.read().decode("utf-8", "replace").strip()
+                err.close()
+                if msg:
+                    log.warning("ffmpeg: %s", msg[-500:])
 
     def stop(self):
         self._stop.set()

@@ -1,0 +1,383 @@
+# Hear Church on Windows x64: test suite, sidecar exe and sermon smoke test (docs/windows-engine.md), the WinUI 3
+# app with the sidecar, walked through its screens with screenshots (docs/windows-app.md), and its installer with
+# automatic updates, installed, updated and uninstalled on the runner (docs/windows-release.md).
+name: windows
+
+on:
+  push:
+    branches: [chat/hc-win]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version, the Mac's (e.g. 0.4.0)"
+        default: "0.1.0"
+      build:
+        description: "Windows build number (empty: this run's number)"
+        default: ""
+      channel:
+        description: "Update channel"
+        type: choice
+        options: [dev, public]
+        default: dev
+
+permissions:
+  contents: read
+
+concurrency:
+  group: windows-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PYTHONUTF8: "1"                 # the exe has UTF-8 mode built in; the tests get it here
+  UV_PYTHON_PREFERENCE: only-managed
+  # A public-domain sermon (LibriVox: C. H. Spurgeon, Talks to Farmers, ch. 7 "The Parable of the Sower").
+  SERMON_URL: https://archive.org/download/talkstofarmers_1910_librivox/talkstofarmers_07_spurgeon_64kb.mp3
+  SERMON_SHA1: b1b181465ebf9c80d4cacfacfadeb0f44377e9dd
+  # The release this run builds (docs/windows-release.md). A push builds a dev build of 0.1.0 numbered by the run.
+  APP_VERSION: ${{ inputs.version || '0.1.0' }}
+  APP_BUILD: ${{ inputs.build || github.run_number }}
+  APP_CHANNEL: ${{ inputs.channel || 'dev' }}
+  VPK_VERSION: "1.2.161"   # the Velopack package in windows/HearChurch/HearChurch.csproj: keep the two the same
+
+jobs:
+  tests:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6   # Python from .python-version
+        with:
+          enable-cache: true
+      - name: Install (uv.lock, CPU speech recognition)
+        run: uv sync --frozen --extra linux
+      - name: Test suite
+        run: uv run --no-sync pytest -q -p no:cacheprovider
+
+  engine:
+    runs-on: windows-latest
+    timeout-minutes: 90
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v6   # Python from .python-version
+        with:
+          enable-cache: true
+
+      - name: Install (uv.lock, CPU speech recognition)
+        run: uv sync --frozen --extra linux
+
+      - name: Build hearchurch-engine.exe (PyInstaller onedir)
+        run: |
+          uv pip install "pyinstaller>=6.10,<7"
+          uv run --no-sync python windows/build.py
+          du -sh dist/hearchurch-engine
+
+      - name: Self-check the exe
+        run: dist/hearchurch-engine/hearchurch-engine.exe --self-check
+
+      - name: ffmpeg (test recordings only)
+        run: |
+          if ! command -v ffmpeg >/dev/null; then choco install ffmpeg -y --no-progress >/dev/null; fi
+          ffmpeg -version | head -1
+
+      - name: Cache the sermon recording
+        uses: actions/cache@v4
+        with:
+          path: samples/sermon.mp3
+          key: sermon-${{ env.SERMON_SHA1 }}
+
+      - name: Fetch the sermon recording
+        run: |
+          [ -f samples/sermon.mp3 ] || curl -sSfL --retry 3 -o samples/sermon.mp3 "$SERMON_URL"
+          echo "$SERMON_SHA1  samples/sermon.mp3" | sha1sum -c -
+
+      - name: Sermon end to end (exe → hub proxy with a fake Claude → Piper), lag numbers
+        run: |
+          export PATH="$PATH:/c/ProgramData/chocolatey/bin"
+          uv run --no-sync python scripts/windows_smoke.py \
+            --engine dist/hearchurch-engine/hearchurch-engine.exe --audio samples/sermon.mp3 \
+            --duration 300 --wolof 45 --out smoke.json --keep smoke-logs
+          {
+            echo '### Sermon on the Windows runner (exe)'
+            echo '```json'
+            cat smoke.json
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload the sidecar
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: hearchurch-engine-win-x64
+          path: dist/hearchurch-engine
+          retention-days: 7
+          if-no-files-found: ignore
+
+      - name: Upload the smoke-test logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: smoke-logs
+          path: |
+            smoke.json
+            smoke-logs
+          retention-days: 7
+          if-no-files-found: ignore
+
+  # The Wolof voice (SpeechT5 on onnxruntime, docs/windows-engine.md "The Wolof voice"): exported to ONNX here (torch
+  # only in this step's own venv, never in the app), its speed on the runner's 4 vCPU, then the exe voicing Wolof.
+  wolof-voice:
+    runs-on: windows-latest
+    timeout-minutes: 75
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v6   # Python from .python-version
+        with:
+          enable-cache: true
+
+      - name: Install (uv.lock, CPU speech recognition)
+        run: uv sync --frozen --extra linux
+
+      - name: Export the Wolof voice to ONNX (the published archive's recipe)
+        run: |
+          uv venv -q .export -p 3.12
+          uv pip install -q --python .export "torch==2.14.1" --index-url https://download.pytorch.org/whl/cpu
+          uv pip install -q --python .export "transformers==5.19.0" "sentencepiece==0.2.3" "onnx==1.23.2" \
+            "onnxscript==0.7.2" "onnxruntime==1.31.0" "numpy==2.5.5" "soundfile==0.14.0"
+          .export/Scripts/python -I -X utf8 scripts/models/export_speecht5_onnx.py --out wolof-voice --int8 \
+            > export.log 2>&1 || { tail -40 export.log; exit 1; }
+          grep -E "MB$" export.log
+          # Informational: the same files as the archive app/wolof_voice.json names (the export is deterministic)?
+          .export/Scripts/python -I -X utf8 scripts/models/package_model.py wolof-voice --runtime voice --exclude "*.onnx" \
+            --include encoder.int8.onnx --include decoder.int8.onnx --include vocoder.onnx \
+            --prefix wolof-voice-speecht5-onnx-int8 --name check --out wolof-voice-pkg --manifest wolof-voice-pkg.json \
+            | grep '"id"' || true
+          grep '"id"' app/wolof_voice.json
+
+      - name: Speed of the Wolof voice on this runner (real-time factor)
+        run: |
+          uv run --no-sync python scripts/wolof_voice_bench.py wolof-voice --passes 5 --out wolof-bench.json
+          {
+            echo '### Wolof voice (SpeechT5 ONNX) on the Windows runner'
+            echo '```json'
+            cat wolof-bench.json
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Build hearchurch-engine.exe (PyInstaller onedir)
+        run: |
+          uv pip install "pyinstaller>=6.10,<7"
+          uv run --no-sync python windows/build.py
+
+      - name: ffmpeg (test recordings only)
+        run: |
+          if ! command -v ffmpeg >/dev/null; then choco install ffmpeg -y --no-progress >/dev/null; fi
+          ffmpeg -version | head -1
+
+      - name: Cache the sermon recording
+        uses: actions/cache@v4
+        with:
+          path: samples/sermon.mp3
+          key: sermon-${{ env.SERMON_SHA1 }}
+
+      - name: Fetch the sermon recording
+        run: |
+          [ -f samples/sermon.mp3 ] || curl -sSfL --retry 3 -o samples/sermon.mp3 "$SERMON_URL"
+          echo "$SERMON_SHA1  samples/sermon.mp3" | sha1sum -c -
+
+      - name: The exe voices Wolof (English → fake Claude → the Wolof voice)
+        run: |
+          export PATH="$PATH:/c/ProgramData/chocolatey/bin"
+          uv run --no-sync python scripts/windows_smoke.py \
+            --engine dist/hearchurch-engine/hearchurch-engine.exe --audio samples/sermon.mp3 \
+            --no-sermon --wolof-voice 120 --wolof-voice-dir wolof-voice --out wolof-smoke.json --keep wolof-smoke-logs
+          {
+            echo '### The exe voicing Wolof on the Windows runner'
+            echo '```json'
+            cat wolof-smoke.json
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload the Wolof voice logs and numbers
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wolof-voice-logs
+          path: |
+            wolof-bench.json
+            wolof-smoke.json
+            wolof-smoke-logs
+          retention-days: 7
+          if-no-files-found: ignore
+
+  app:
+    runs-on: windows-latest
+    timeout-minutes: 75
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v6   # Python from .python-version
+        with:
+          enable-cache: true
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Build the app (WinUI 3, self-contained, x64)
+        run: |
+          dotnet publish windows/HearChurch/HearChurch.csproj -c Release -r win-x64 -p:Platform=x64 \
+            -p:Version=$APP_VERSION -p:FileVersion=$APP_VERSION.$APP_BUILD -p:AssemblyVersion=$APP_VERSION.$APP_BUILD \
+            -o out/HearChurch -nologo -clp:ErrorsOnly
+          ls out/HearChurch | head -50
+          du -sh out/HearChurch
+
+      - name: Install (uv.lock, CPU speech recognition)
+        run: uv sync --frozen --extra linux
+
+      - name: Build the sidecar and put it beside the app (engine\)
+        run: |
+          uv pip install "pyinstaller>=6.10,<7"
+          uv run --no-sync python windows/build.py
+          cp -r dist/hearchurch-engine out/HearChurch/engine
+          out/HearChurch/engine/hearchurch-engine.exe --self-check > /dev/null
+          du -sh out/HearChurch
+
+      - name: Upload the app (HearChurch.exe + engine)
+        uses: actions/upload-artifact@v4
+        with:
+          name: hearchurch-win-x64
+          path: out/HearChurch
+          retention-days: 7
+
+      - name: Cache the sermon recording
+        uses: actions/cache@v4
+        with:
+          path: samples/sermon.mp3
+          key: sermon-${{ env.SERMON_SHA1 }}
+
+      - name: Fetch the sermon recording
+        run: |
+          [ -f samples/sermon.mp3 ] || curl -sSfL --retry 3 -o samples/sermon.mp3 "$SERMON_URL"
+          echo "$SERMON_SHA1  samples/sermon.mp3" | sha1sum -c -
+
+      - name: ffmpeg (test recordings only)
+        run: |
+          if ! command -v ffmpeg >/dev/null; then choco install ffmpeg -y --no-progress >/dev/null; fi
+          ffmpeg -version | head -1
+
+      - name: Screenshots (sign-in, main window idle and in a meeting, settings)
+        run: |
+          export PATH="$PATH:/c/ProgramData/chocolatey/bin"
+          uv run --no-sync python scripts/windows_screens.py --app out/HearChurch/HearChurch.exe \
+            --audio samples/sermon.mp3 --out screens --keep screens-logs
+
+      - name: Upload the screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-screenshots
+          path: |
+            screens
+            screens-logs
+          retention-days: 7
+          if-no-files-found: ignore
+
+  installer:
+    # The app job's folder (app + sidecar) → Velopack: Setup.exe and the update packages for one channel. Then on the
+    # runner: silent install, the app and its engine start, an update from a local feed, uninstall.
+    needs: app
+    if: ${{ !cancelled() }}
+    runs-on: windows-latest
+    timeout-minutes: 60
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: The app folder from the app job
+        uses: actions/download-artifact@v4
+        with:
+          name: hearchurch-win-x64
+          path: out/HearChurch
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: vpk (Velopack's packager)
+        run: |
+          dotnet tool install -g vpk --version "$VPK_VERSION" > /dev/null
+          echo "$USERPROFILE/.dotnet/tools" >> "$GITHUB_PATH"
+
+      - name: Package version
+        # dev: 0.4.0-dev.12 (repeatable at one version, like the Mac's dev builds); public: 0.4.0. The test update
+        # is the next patch version, so it is newer than either.
+        run: |
+          if [ "$APP_CHANNEL" = public ]; then pkg="$APP_VERSION"; else pkg="$APP_VERSION-dev.$APP_BUILD"; fi
+          IFS=. read -r major minor patch <<< "$APP_VERSION"
+          echo "PKG_VERSION=$pkg" >> "$GITHUB_ENV"
+          echo "TEST_VERSION=$major.$minor.$((patch + 1))-test.$APP_BUILD" >> "$GITHUB_ENV"
+          echo "package $pkg on $APP_CHANNEL"
+
+      - name: The channel's latest release, for delta updates (read only; skipped until there is one)
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          vpk download http --url "https://hearchurch.com/download/windows/$APP_CHANNEL" --channel "$APP_CHANNEL" \
+            --outputDir releases || echo "no earlier $APP_CHANNEL release: full packages only"
+
+      - name: Package (Setup.exe, full and delta packages, releases.<channel>.json)
+        run: |
+          pack() {   # version, output folder
+            vpk pack --packId HearChurchApp --packVersion "$1" --packDir out/HearChurch --mainExe HearChurch.exe \
+              --packTitle "Hear Church" --packAuthors "Hear Church" --icon windows/HearChurch/Assets/HearChurch.ico \
+              --channel "$APP_CHANNEL" --shortcuts Desktop,StartMenuRoot --noPortable --outputDir "$2"
+          }
+          pack "$PKG_VERSION" releases
+          ls -la releases
+          # The local feed for the update test: this release plus a newer one made from the same files.
+          cp -r releases testfeed
+          pack "$TEST_VERSION" testfeed
+          ls -la testfeed
+
+      - name: Upload the release (what goes to R2 windows/<channel>/)
+        uses: actions/upload-artifact@v4
+        with:
+          name: hearchurch-windows-${{ env.APP_CHANNEL }}
+          path: releases
+          retention-days: 7
+
+      - name: Install, start, update, uninstall
+        shell: pwsh
+        run: |
+          $setup = Get-ChildItem releases -Filter '*Setup.exe' | Select-Object -First 1
+          pwsh -NoProfile -File scripts/windows_install_test.ps1 -Setup $setup.FullName -Feed testfeed `
+            -V1 $env:PKG_VERSION -V2 $env:TEST_VERSION -Out install-test
+          $code = $LASTEXITCODE
+          "### Installer on the Windows runner`n``````json" | Add-Content $env:GITHUB_STEP_SUMMARY
+          Get-Content install-test/install.json | Add-Content $env:GITHUB_STEP_SUMMARY
+          '```' | Add-Content $env:GITHUB_STEP_SUMMARY
+          exit $code
+
+      - name: Upload the install test's logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: install-test
+          path: install-test
+          retention-days: 7
+          if-no-files-found: ignore

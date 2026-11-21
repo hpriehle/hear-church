@@ -384,7 +384,8 @@ def test_save_secrets_keeps_other_lines_and_is_private(tmp_path):
     save_secrets({"ANTHROPIC_API_KEY": "sk-ant-api03-new"}, f)
     assert load_secrets(f) == {"ANTHROPIC_API_KEY": "sk-ant-api03-new"}
     assert "# comment" in f.read_text() and "OTHER=1" in f.read_text()
-    assert f.stat().st_mode & 0o777 == 0o600
+    if sys.platform != "win32":   # Windows has no POSIX modes: the per-user %LOCALAPPDATA% ACL keeps it private
+        assert f.stat().st_mode & 0o777 == 0o600
     assert claude_access(f) == "api_key"
     save_secrets({}, f)
     assert claude_access(f) == "login"
@@ -528,9 +529,12 @@ def test_english_only_speech_model_is_not_used_for_another_language():
     assert t._fw_wanted() == "large-v3"
 
 
-def test_slow_cpu_steps_down_one_model_size_and_no_further():
+def test_slow_cpu_steps_down_one_model_size_and_no_further(monkeypatch):
     from app.config import SttCfg
     from app.stt import Transcriber
+
+    # the smaller model counts as downloaded (a fresh machine, e.g. CI, would fetch it in the background first)
+    monkeypatch.setattr(Transcriber, "_on_disk", staticmethod(lambda name: True))
 
     t = Transcriber(SttCfg(engine="faster-whisper", faster_whisper_model="small", language="ru"))
     for _ in range(5):
@@ -558,9 +562,12 @@ def test_mixed_speaker_meeting_steps_down_to_the_multilingual_model():
     assert t._fw_wanted() == "base.en"
 
 
-def test_fast_cpu_or_short_chunks_keep_the_model():
+def test_fast_cpu_or_short_chunks_keep_the_model(monkeypatch):
     from app.config import SttCfg
     from app.stt import Transcriber
+
+    # the smaller model counts as downloaded (a fresh machine, e.g. CI, would fetch it in the background first)
+    monkeypatch.setattr(Transcriber, "_on_disk", staticmethod(lambda name: True))
 
     t = Transcriber(SttCfg(engine="faster-whisper", faster_whisper_model="small.en", language="en"))
     for _ in range(20):
@@ -694,3 +701,38 @@ def test_talk_turn_taking_ignores_the_mic_until_played():
         assert len(turns) == 1 and s.state == "listening"
 
     asyncio.run(run())
+
+
+def test_lines_waiting_for_speech_recognition_step_down_even_below_the_rtf_limit(monkeypatch):
+    """W1 on a 4-vCPU PC: small at RTF 0.57, but bursts of speech queued and lines waited 6-15 s for their turn.
+    Waiting, not only the average speed, steps down (docs/intel-latency.md)."""
+    from app.config import SttCfg
+    from app.stt import STEP_DOWN_RTF, STEP_DOWN_WAIT_S, Transcriber
+
+    monkeypatch.setattr(Transcriber, "_on_disk", staticmethod(lambda name: True))
+    t = Transcriber(SttCfg(engine="faster-whisper", faster_whisper_model="small", language="en", languages=["en", "fr"]))
+    for wait in [0.0, 1.0, 2.5, 0.5, 9.0, 1.5, 0.0, 3.0] * 3:   # keeping up: a long wait now and then is normal
+        t.note_wait(wait)
+        t._measure(6.0, 3.4)
+    assert t._fw_wanted() == "small" and not t.stepped_down and t.wait <= STEP_DOWN_WAIT_S
+    for _ in range(5):                                         # a burst: lines wait 6-15 s
+        t.note_wait(8.0)
+        t._measure(6.0, 3.4)
+    assert t.rtf < STEP_DOWN_RTF
+    assert t._fw_wanted() == "base" and "waited" in t.stepped_down
+    assert any("small → base" in e and "waited" in e for e in t.events)
+
+
+def test_a_wait_is_used_for_one_chunk_only():
+    from app.config import SttCfg
+    from app.stt import Transcriber
+
+    t = Transcriber(SttCfg(engine="faster-whisper", faster_whisper_model="small", language="ru"))
+    t.note_wait(30.0)
+    t._measure(6.0, 3.0)
+    t._measure(6.0, 3.0)
+    assert sorted(q for _, _, q in t._recent) == [0.0, 30.0]
+    m = Transcriber(SttCfg(engine="mlx", language="ru"))     # Apple Silicon: never measured
+    m.note_wait(30.0)
+    m._measure(6.0, 3.0)
+    assert m.wait == 0.0 and m._step == 0

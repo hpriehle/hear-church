@@ -11,9 +11,16 @@ from typing import Any, Literal
 from pydantic import BaseModel, Field, model_validator
 
 ROOT = Path(__file__).resolve().parent.parent
+if getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS"):
+    # The Windows sidecar (hearchurch-engine.exe, PyInstaller onedir): code and shipped files sit in _internal.
+    ROOT = Path(sys._MEIPASS)
+if getattr(sys, "frozen", False) and sys.platform == "win32" and not os.environ.get("HEARCHURCH_HOME"):
+    # Started without the Windows app (e.g. by hand): the same folder the app passes, never next to the exe.
+    os.environ["HEARCHURCH_HOME"] = str(Path(os.environ.get("LOCALAPPDATA") or Path.home() / "AppData" / "Local")
+                                        / "HearChurch")
 # Where this computer's own files go (settings, logs, glossaries, downloaded voices). The project folder by
 # default; the Hear Church Mac app sets HEARCHURCH_HOME to ~/Library/Application Support/Hear Church because
-# the code itself sits read-only inside the signed app.
+# the code itself sits read-only inside the signed app (the Windows app: %LOCALAPPDATA%\HearChurch).
 HOME = Path(os.environ["HEARCHURCH_HOME"]).expanduser() if os.environ.get("HEARCHURCH_HOME") else ROOT
 if os.environ.get("HEARCHURCH_HOME"):
     # The Mac app: downloaded models (Whisper, Wolof) go to its data folder, never ~/.cache. Set before
@@ -146,9 +153,21 @@ class VoiceCfg(BaseModel):
 
 
 # Voices for languages other than French (French uses [tts]).
-# Wolof: SpeechT5 (male/female) is fast on Apple Silicon; elsewhere the faster MMS voice keeps up better.
+# Wolof: SpeechT5 (male/female): torch on the Mac, onnxruntime on Windows (app/wolof_voice.py). On a Linux
+# development server the faster MMS voice (non-commercial licence) keeps up better.
+WOLOF_SPEECHT5 = VoiceCfg(engine="speecht5", voice="male")
+WOLOF_MMS = VoiceCfg(engine="mms", voice="default")
+
+
+def _commercial_wolof() -> bool:
+    """Where the paid app runs (the Mac, Windows): the MMS voice is never offered or used."""
+    from .wolof_voice import onnx_voice
+
+    return sys.platform == "darwin" or onnx_voice()
+
+
 DEFAULT_VOICES: dict[str, VoiceCfg] = {
-    "wo": VoiceCfg(engine="speecht5", voice="male") if sys.platform == "darwin" else VoiceCfg(engine="mms", voice="default"),
+    "wo": WOLOF_SPEECHT5 if sys.platform in ("darwin", "win32") else WOLOF_MMS,
     "es": VoiceCfg(engine="piper", voice="es_MX-ald-medium"),
     "ru": VoiceCfg(engine="piper", voice="ru_RU-denis-medium"),
     "pt": VoiceCfg(engine="piper", voice="pt_BR-cadu-medium"),
@@ -256,9 +275,10 @@ def tts_for(settings: "Settings", code: str) -> TtsCfg:
         return tts.model_copy(update={"engine": "piper", "voice": "fr_FR-tom-medium"}) if tts.engine == "say" else tts
     v = settings.voices.get(code)
     if v is None or v.engine == "say":
-        v = DEFAULT_VOICES.get(code) or VoiceCfg(engine="piper", voice="")
-    elif v.engine == "mms" and sys.platform == "darwin":  # non-commercial licence: not in the paid Mac app
-        v = DEFAULT_VOICES[code].model_copy(update={"speed": v.speed})
+        v = (WOLOF_SPEECHT5 if code == "wo" and _commercial_wolof() else DEFAULT_VOICES.get(code)) \
+            or VoiceCfg(engine="piper", voice="")
+    elif v.engine == "mms" and _commercial_wolof():  # non-commercial licence: not in the paid app (Mac, Windows)
+        v = WOLOF_SPEECHT5.model_copy(update={"speed": v.speed})
     return TtsCfg(engine=v.engine, voice=v.voice, rate=settings.tts.rate, volume=settings.tts.volume, speed=v.speed,
                   lang=code)
 

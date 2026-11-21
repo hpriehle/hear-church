@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+import os
 import platform
 import re
 import sys
@@ -139,12 +140,34 @@ def resolve_engine(engine: str) -> str:
 
 
 # CPU speech recognition (faster-whisper) on a computer too slow for the configured model steps down this ladder,
-# one size at a time, while the measured speed stays above STEP_DOWN_RTF (seconds of work per second of speech).
+# one size at a time, while the measured speed stays above STEP_DOWN_RTF (seconds of work per second of speech), or
+# while lines wait longer than STEP_DOWN_WAIT_S for their turn (median over the window): at an RTF of 0.5-0.6 bursts of
+# speech still queue up, and captions end up 10-20 s behind (docs/intel-latency.md, docs/windows-engine.md).
 FW_LADDER = ["small", "base"]
 STEP_DOWN_RTF = 0.8
+STEP_DOWN_WAIT_S = 4.0
 RTF_WINDOW = 8           # judged on the last this many chunks (one slow chunk alone never steps down)
 RTF_MIN_CHUNKS = 6       # chunks measured on a model before it can be judged too slow
 RTF_MIN_AUDIO_S = 2.0    # shorter chunks say little about speed
+
+
+_CUDA: bool | None = None   # faster-whisper on an NVIDIA GPU: None = not checked yet
+
+
+def _cuda_usable() -> bool:
+    """An NVIDIA GPU that CTranslate2 sees (Windows/Linux PCs; never a Mac). Optional: HEARCHURCH_STT_DEVICE=cpu
+    turns it off. Whether its CUDA libraries really load is only known at the first model (_fw_load)."""
+    global _CUDA
+    if _CUDA is None:
+        _CUDA = False
+        if os.environ.get("HEARCHURCH_STT_DEVICE", "").lower() != "cpu" and sys.platform != "darwin":
+            try:
+                import ctranslate2
+
+                _CUDA = ctranslate2.get_cuda_device_count() > 0
+            except Exception:
+                pass
+    return _CUDA
 
 
 class Transcriber:
@@ -156,7 +179,9 @@ class Transcriber:
         self.ready = False
         self.load_s = 0.0
         self.rtf = 0.0             # seconds of work per second of speech, last RTF_WINDOW chunks (faster-whisper)
-        self._recent: deque[tuple[float, float]] = deque(maxlen=RTF_WINDOW)   # (speech s, work s)
+        self.wait = 0.0            # median seconds a line waited for its turn, last RTF_WINDOW chunks (faster-whisper)
+        self._recent: deque[tuple[float, float, float]] = deque(maxlen=RTF_WINDOW)   # (speech s, work s, waited s)
+        self._next_wait = 0.0      # how long the chunk about to be recognised waited in the queue (note_wait)
         self._step = 0             # sizes stepped down from cfg.faster_whisper_model (kept while the app runs)
         self.stepped_down = ""     # what the operator is told when it happened
         self.events: list[str] = []   # step-downs and background downloads, for the meeting report
@@ -194,13 +219,22 @@ class Transcriber:
         english_only = (self.cfg.languages or [self.cfg.language]) == ["en"]
         return size + ".en" if en and english_only else size
 
+    def note_wait(self, seconds: float) -> None:
+        """The pipeline, before the next chunk: how long it waited in the queue for speech recognition."""
+        self._next_wait = max(0.0, seconds)
+
     def _measure(self, audio_s: float, work_s: float) -> None:
-        """Track the real-time factor; step down one model size when this CPU can't keep up with the speaker."""
+        """Track the real-time factor and the queue wait; step down one model size when this CPU can't keep up with
+        the speaker: too slow on average, or lines waiting too long for their turn."""
+        waited, self._next_wait = self._next_wait, 0.0
         if self.engine != "faster-whisper" or audio_s < RTF_MIN_AUDIO_S:
             return
-        self._recent.append((audio_s, work_s))
-        self.rtf = sum(w for _, w in self._recent) / sum(a for a, _ in self._recent)
-        if len(self._recent) < RTF_MIN_CHUNKS or self.rtf <= STEP_DOWN_RTF:
+        self._recent.append((audio_s, work_s, waited))
+        self.rtf = sum(w for _, w, _ in self._recent) / sum(a for a, _, _ in self._recent)
+        waits = sorted(q for _, _, q in self._recent)
+        self.wait = waits[len(waits) // 2]
+        slow, behind = self.rtf > STEP_DOWN_RTF, self.wait > STEP_DOWN_WAIT_S
+        if len(self._recent) < RTF_MIN_CHUNKS or not (slow or behind):
             return
         before = self._fw_wanted()
         self._step += 1
@@ -212,10 +246,16 @@ class Transcriber:
             self._step -= 1
             self._fetch(after)
             return
-        self.stepped_down = (f"Speech recognition was too slow on this computer ({self.rtf:.2f}s of work per second "
-                             f"of speech with {before}): switching to the smaller {after} model")
+        if slow:
+            self.stepped_down = (f"Speech recognition was too slow on this computer ({self.rtf:.2f}s of work per "
+                                 f"second of speech with {before}): switching to the smaller {after} model")
+            why = f"it needed {self.rtf:.2f}s per second of speech"
+        else:
+            self.stepped_down = (f"Speech recognition fell behind on this computer (lines waited {self.wait:.0f}s for "
+                                 f"their turn with {before}): switching to the smaller {after} model")
+            why = f"lines waited {self.wait:.1f}s for their turn, at {self.rtf:.2f}s per second of speech"
         log.warning(self.stepped_down)
-        self.events.append(f"model {before} → {after} (it needed {self.rtf:.2f}s per second of speech)")
+        self.events.append(f"model {before} → {after} ({why})")
         self._recent.clear()   # judge the new model on its own speed (it loads at the next chunk)
 
     @staticmethod
@@ -225,7 +265,19 @@ class Transcriber:
         directory instead when one exists (a folder called "base" broke the step-down in a test)."""
         from faster_whisper import WhisperModel, download_model
 
-        return WhisperModel(download_model(name, local_files_only=local_only), device="cpu", compute_type="int8")
+        path = download_model(name, local_files_only=local_only)
+        if _cuda_usable():
+            try:
+                model = WhisperModel(path, device="cuda", compute_type="int8_float16")
+                # CUDA libraries (cuBLAS, cuDNN) are only loaded on the first transcription: try one now.
+                list(model.transcribe(np.zeros(16000, dtype=np.float32), language="en")[0])
+                log.info("speech recognition on the NVIDIA GPU (%s)", name)
+                return model
+            except Exception as e:
+                global _CUDA
+                _CUDA = False
+                log.warning("NVIDIA GPU found but not usable for speech recognition (%s): using the CPU", e)
+        return WhisperModel(path, device="cpu", compute_type="int8")
 
     @staticmethod
     def _on_disk(name: str) -> bool:
