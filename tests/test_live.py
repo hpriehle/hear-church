@@ -298,7 +298,7 @@ def test_child_sends_its_input_until_told_to_stop(monkeypatch):
 
 
 def test_audio_is_marked_as_voice_for_wifi():
-    if not hasattr(socket, "IP_RECVTOS"):
+    if not hasattr(socket, "IP_RECVTOS") or not hasattr(socket.socket, "recvmsg"):   # Windows: no recvmsg
         pytest.skip("can't read the TOS byte here")
     sender = LiveSender(ToneSource(), port=0)
     sender.start()
