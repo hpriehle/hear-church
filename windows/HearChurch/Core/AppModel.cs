@@ -115,8 +115,12 @@ public sealed class AppModel
     public async Task SetLiveEnglish(bool on)
     {
         await Engine.Set(new JsonObject { ["audio"] = new JsonObject { ["live_english"] = on } });
-        if (on && await Firewall.Allow(live: true) is { } why) { Message = why; Emit(); }   // once: Windows asks (UAC)
+        LiveFirewall = on ? await Firewall.Allow(live: true) : null;   // once: Windows asks (UAC)
+        Emit();
     }
+
+    /// <summary>Live is on and Windows Firewall may block it: the step shown under the Live toggle.</summary>
+    public string? LiveFirewall { get; private set; }
 
     public async Task SetSharing(bool local)
     {

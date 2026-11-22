@@ -234,6 +234,11 @@ private struct LiveEnglishToggle: View {
             }))
             .toggleStyle(.switch)
             Text("Phones on this Wi-Fi hear the room audio").font(.callout).foregroundStyle(.secondary)
+            if model.liveEnglish && model.localNetwork.denied {
+                Text("Allow Hear Church to find devices on your network: System Settings > Privacy & Security > Local Network > turn on Hear Church")
+                    .font(.callout).foregroundStyle(.orange).fixedSize(horizontal: false, vertical: true)
+                Button("Open Local Network Settings") { LocalNetwork.openSettings() }
+            }
             if model.running, let live = model.engine.status?.live_english, live.sending {
                 Label("\(live.listeners) \(live.listeners == 1 ? "phone" : "phones") listening", systemImage: "wifi")
                     .font(.callout).monospacedDigit()

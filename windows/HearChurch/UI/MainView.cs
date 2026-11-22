@@ -302,7 +302,7 @@ public sealed class MainView : Grid
     }
 
     private string LiveEnglishKey() =>
-        $"{_model.LiveEnglish}|{_model.Running}|{_model.Engine.Status?.LiveEnglish?.Sending}|{_model.Engine.Status?.LiveEnglish?.Listeners}";
+        $"{_model.LiveEnglish}|{_model.Running}|{_model.Engine.Status?.LiveEnglish?.Sending}|{_model.Engine.Status?.LiveEnglish?.Listeners}|{_model.LiveFirewall}";
 
     /// <summary>Live English: the room audio, as it comes in, to phones on this Wi-Fi (free).</summary>
     private UIElement LiveEnglishToggle()
@@ -312,6 +312,13 @@ public sealed class MainView : Grid
         t.Toggled += (_, _) => { if (t.IsOn != _model.LiveEnglish) _ = _model.SetLiveEnglish(t.IsOn); };
         s.Children.Add(t);
         s.Children.Add(Ui.T("Phones on this Wi-Fi hear the room audio", Ui.Callout, Ui.Secondary));
+        if (_model.LiveEnglish && _model.LiveFirewall is { } why)
+        {
+            s.Children.Add(Ui.T(why, Ui.Callout, Ui.Orange));
+            var allow = new Button { Content = "Allow in Windows Firewall" };
+            allow.Click += (_, _) => _ = _model.SetLiveEnglish(true);
+            s.Children.Add(allow);
+        }
         if (_model.Running && _model.Engine.Status?.LiveEnglish is { Sending: true } live)
             s.Children.Add(Ui.T($"{live.Listeners} {(live.Listeners == 1 ? "phone" : "phones")} listening", Ui.Callout));
         return s;

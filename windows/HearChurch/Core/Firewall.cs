@@ -71,6 +71,6 @@ public static class Firewall
         });
     }
 
-    public const string LiveDeclined = "Windows Firewall may keep phones on this Wi-Fi from hearing Live. Turn Live off and on again and allow Hear Church when Windows asks.";
+    public const string LiveDeclined = "Windows Firewall may keep phones on this Wi-Fi from hearing Live. Choose Allow in Windows Firewall below, then Yes when Windows asks.";
     public const string Declined = "Windows Firewall may keep phones on this Wi-Fi from connecting to this PC. Choose This Wi-Fi only again and allow Hear Church when Windows asks.";
 }

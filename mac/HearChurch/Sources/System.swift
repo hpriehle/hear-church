@@ -77,6 +77,34 @@ final class NetworkWatch: ObservableObject {
     }
 }
 
+/// Live: may this Mac reach phones on the Wi-Fi (System Settings → Privacy & Security → Local Network)? Browsing
+/// for Live's own Bonjour service makes macOS ask the first time, and waits with PolicyDenied while it's off (TN3179).
+@MainActor
+final class LocalNetwork: ObservableObject {
+    @Published private(set) var denied = false
+    private var browser: NWBrowser?
+
+    func watch(_ on: Bool) {
+        guard on != (browser != nil) else { return }
+        browser?.cancel()
+        browser = nil
+        denied = false
+        guard on else { return }
+        let b = NWBrowser(for: .bonjour(type: "_hearchurch-live._udp", domain: nil), using: .udp)
+        b.stateUpdateHandler = { [weak self] state in
+            var no = false
+            if case .waiting(.dns(let code)) = state { no = code == -65570 || code == -65555 }   // PolicyDenied, NoAuth
+            MainActor.assumeIsolated { self?.denied = no }
+        }
+        b.start(queue: .main)
+        browser = b
+    }
+
+    static func openSettings() {
+        NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_LocalNetwork")!)
+    }
+}
+
 /// The level alone, ~10 times a second. Only the meters watch it, so the rest of the window (and an open
 /// menu, such as the input picker) doesn't redraw with every buffer.
 @MainActor

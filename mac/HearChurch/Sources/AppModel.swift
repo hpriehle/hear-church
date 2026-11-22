@@ -21,6 +21,7 @@ final class AppModel: ObservableObject {
     let engine = Engine()
     let mic = MicMonitor()
     let network = NetworkWatch()
+    let localNetwork = LocalNetwork()
     private let keepAwake = KeepAwake()
     private var bag: Set<AnyCancellable> = []
     private var lastHubCheck = Date.distantPast
@@ -33,6 +34,12 @@ final class AppModel: ObservableObject {
         engine.objectWillChange.sink { [weak self] in self?.objectWillChange.send() }.store(in: &bag)
         mic.objectWillChange.sink { [weak self] in self?.objectWillChange.send() }.store(in: &bag)
         network.objectWillChange.sink { [weak self] in self?.objectWillChange.send() }.store(in: &bag)
+        localNetwork.objectWillChange.sink { [weak self] in self?.objectWillChange.send() }.store(in: &bag)
+        // Live on (now or from the last launch): check the Local Network permission, and so ask for it early.
+        engine.objectWillChange.receive(on: RunLoop.main).sink { [weak self] in
+            guard let self else { return }
+            self.localNetwork.watch(self.liveEnglish)
+        }.store(in: &bag)
         // Only the hub check needs a clock; everything else follows events (the engine's status, power, windows).
         Timer.publish(every: 10, on: .main, in: .common).autoconnect().sink { [weak self] _ in self?.tick() }.store(in: &bag)
         engine.$status.sink { [weak self] st in self?.followRunning(st) }.store(in: &bag)
