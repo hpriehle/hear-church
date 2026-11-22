@@ -256,31 +256,24 @@ class Pipeline:
         return {"mic_name": getattr(src, "name", None), "mic_warning": src.warning}
 
     def live_english(self) -> dict[str, Any]:
-        """For /api/status: the setting, and while sending, how many phones listen."""
+        """For /api/status: the setting, and while sending, how many phones listen and on which input path."""
         live = self.live
         return {"on": self.settings.audio.live_english, "sending": live is not None,
-                "listeners": live[0].listener_count() if live else 0}
+                "listeners": live[0].listener_count() if live else 0,
+                "low_latency": bool(live and getattr(live[0], "low_latency", False))}
 
     def sync_live_english(self) -> None:
         """Start or stop Live English to match the setting and the meeting (in a thread: mDNS blocks)."""
         threading.Thread(target=self._sync_live, name="live-english", daemon=True).start()
 
-    def _sync_live(self) -> None:
+    def _sync_live(self, failed=None) -> None:
+        """`failed`: the own-input sender that stopped by itself; Live goes on, on the meeting's input."""
         with self._live_lock:
             src = self.worker.source if self.worker else None
             want = bool(self.capturing and self.settings.audio.live_english and isinstance(src, MicSource))
-            if want and self.live is None:
-                try:
-                    from live.sender import LiveSender, TapSource, advertise, local_ip
-                    sender = LiveSender(TapSource())
-                    close = advertise(self.settings.engine.name or socket.gethostname(), local_ip(), sender.port)
-                    sender.start()
-                    src.tap = sender.source.push
-                    self.live = (sender, close)
-                    log.info("Live English: sending the room audio on port %d", sender.port)
-                except Exception as e:  # never stops the meeting
-                    log.warning("Live English could not start: %s", e)
-            elif not want and self.live is not None:
+            wanted = (src._switch_to or src.wanted) if want else None   # the input chosen, even if not switched yet
+            if self.live is not None and (not want or self.live[0] is failed
+                                          or getattr(self.live[0], "input", wanted) != wanted):
                 if src is not None:
                     src.tap = None
                 (sender, close), self.live = self.live, None
@@ -288,6 +281,31 @@ class Pipeline:
                 if close:
                     close()
                 log.info("Live English: stopped")
+            if want and self.live is None:
+                name = self.settings.engine.name or socket.gethostname()
+                from live.sender import ChildSender, LiveSender, TapSource, advertise, local_ip
+                if failed is None:
+                    try:
+                        device = src.name if wanted == src.wanted else (wanted[0] or None)
+                        sender = ChildSender(device, wanted[1], name, on_exit=lambda s: self._sync_live(failed=s))
+                        sender.input = wanted
+                        self.live = (sender, None)
+                        log.info("Live English: sending the room audio on port %d from its own input "
+                                 "(%.1f ms capture latency)", sender.port, sender.latency_ms)
+                        return
+                    except Exception as e:
+                        log.warning("Live English: own input failed (%s); using the meeting's input (~55 ms later)", e)
+                else:
+                    log.warning("Live English: its own input stopped; using the meeting's input (~55 ms later)")
+                try:
+                    sender = LiveSender(TapSource())
+                    close = advertise(name, local_ip(), sender.port)
+                    sender.start()
+                    src.tap = sender.source.push
+                    self.live = (sender, close)
+                    log.info("Live English: sending the room audio on port %d from the meeting's input", sender.port)
+                except Exception as e:  # never stops the meeting
+                    log.warning("Live English could not start: %s", e)
 
     def start(self, kind: str, device: str | None = None, file: str | Path | None = None,
               speed: float = 1.0, start_s: float = 0.0, max_s: float | None = None,

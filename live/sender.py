@@ -139,7 +139,7 @@ class FileSource(PacedSource):
 class DeviceSource(Source):
     """A live input device via PortAudio. On Windows this uses WASAPI."""
 
-    def __init__(self, device: int | str | None, channel: str = "mix", exclusive: bool = False):
+    def __init__(self, device: int | str | None, channel: str | int = "mix", exclusive: bool = False):
         super().__init__()
         import sounddevice as sd
         self._sd = sd
@@ -148,8 +148,9 @@ class DeviceSource(Source):
         self.device_name = info["name"]
         hostapi = sd.query_hostapis(info["hostapi"])["name"]
         self.hostapi = hostapi
-        self._channels = min(2, int(info["max_input_channels"]))
-        self._channel = channel
+        ch = {"mix": 0, "left": 1, "right": 2}.get(channel, channel)   # or an input channel number (1 = first)
+        self._channels = min(int(info["max_input_channels"]), ch) if ch else min(2, int(info["max_input_channels"]))
+        self._col = ch - 1 if ch and ch <= self._channels else None
         extra = None
         if "WASAPI" in hostapi:
             try:
@@ -169,10 +170,8 @@ class DeviceSource(Source):
         x = indata
         if x.shape[1] == 1:
             mono = x[:, 0]
-        elif self._channel == "left":
-            mono = x[:, 0]
-        elif self._channel == "right":
-            mono = x[:, 1]
+        elif self._col is not None:
+            mono = x[:, self._col]
         else:
             mono = ((x[:, 0].astype(np.int32) + x[:, 1]) // 2).astype(np.int16)
         if frames == P.FRAME_SAMPLES and not len(self._buf):
@@ -197,7 +196,8 @@ class TapSource(PacedSource):
     keeps its 50 ms blocks because 10 ms ones lose audio while Python is busy (4-9% on a MacBook, 2026-11-21)."""
 
     PREBUFFER = 12   # frames (60 ms): one 50 ms block plus slack, so the steady 5 ms clock never runs dry
-    MAX = 40         # frames: more queued (a stall, or the device's clock running fast) and we skip to the newest
+    MAX = 15         # frames: more queued (a stall, or the device's clock running fast) and we skip to the newest
+    latency_ms = PREBUFFER * P.FRAME_MS   # told to phones in HELLO: the delay this path adds before sending
 
     def __init__(self):
         super().__init__()
@@ -223,6 +223,8 @@ class TapSource(PacedSource):
         if len(self._buf) > self.MAX * n:
             self._buf = self._buf[-self.PREBUFFER * n:]
         if len(self._buf) >= (n if self._primed else self.PREBUFFER * n):
+            if not self._primed:  # blocks come 10 frames at a time: start at the target, not up to a block above it
+                self._buf = self._buf[-self.PREBUFFER * n:]
             self._primed = True
             out, self._buf = self._buf[:n], self._buf[n:]
             return out
@@ -248,7 +250,7 @@ def resolve_device(device: int | str | None) -> int | None:
     matches = [d for d in list_devices() if device.lower() in d[1].lower()]
     if not matches:
         raise SystemExit(f"No input device matching {device!r}. Run with --list-devices.")
-    matches.sort(key=lambda d: "WASAPI" not in d[2])
+    matches.sort(key=lambda d: ("WASAPI" not in d[2], d[1].lower() != device.lower()))
     return matches[0][0]
 
 
@@ -286,6 +288,15 @@ class LiveSender:
         else:
             self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.sock.setsockopt(socket.SOL_SOCKET, socket.SO_SNDBUF, 1 << 20)
+        # DSCP EF: Wi-Fi access points send it from their voice queue (WMM AC_VO, RFC 8325). Best effort: Windows
+        # ignores it without a QoS policy, and each option applies only to some socket families / systems.
+        # 0x1116 = SO_NET_SERVICE_TYPE, 4 = NET_SERVICE_TYPE_VO: macOS's own way to ask for the voice class
+        for opt in ((socket.IPPROTO_IP, socket.IP_TOS, 0xB8), (socket.IPPROTO_IPV6, getattr(socket, "IPV6_TCLASS", -1), 0xB8),
+                    *([(socket.SOL_SOCKET, 0x1116, 4)] if sys.platform == "darwin" else [])):
+            try:
+                self.sock.setsockopt(*opt)
+            except OSError:
+                pass
         self.sock.bind((bind, port))
         self.port = self.sock.getsockname()[1]
         self.sock.settimeout(0.5)
@@ -378,6 +389,9 @@ class LiveSender:
         while not self._stop.is_set():
             try:
                 pcm, _ = self.source.frames.get(timeout=0.5)
+                while self.source.frames.qsize() > 4:  # fell behind (a stall): skip to the newest, or the delay stays
+                    pcm, _ = self.source.frames.get_nowait()
+                    self.source.dropped += 1
             except queue.Empty:
                 continue
             self.send_frame(pcm)
@@ -474,6 +488,76 @@ def _advertise_mac(name: str, port: int):
         log.warning("Bonjour advertise failed: error %d", err)
         return None
     return lambda: lib.DNSServiceRefDeallocate(ref)
+
+
+# ---------------------------------------------------------------- own input, in its own process
+class ChildSender:
+    """Live in a child process with its own 5 ms input stream on the meeting's microphone: ~55 ms sooner than the
+    tap. Its own process, so the meeting's Python never delays its callbacks, and its small input buffer can't drag
+    down the translator's 50 ms one (as a second stream in the same process did, 690c620): CoreAudio and WASAPI
+    give each process its own buffer. Raises if it can't open the input; `on_exit(self)` if it stops by itself."""
+
+    low_latency = True
+
+    def __init__(self, device: str | None, channel: int, name: str, on_exit=None, timeout: float = 20.0):
+        import multiprocessing as mp
+        ctx = mp.get_context("spawn")   # a fresh interpreter: no forked meeting threads or PortAudio state
+        self._stop, self._listeners = ctx.Event(), ctx.Value("i", 0)
+        rx, tx = ctx.Pipe(duplex=False)
+        self._proc = ctx.Process(target=_child_main, args=(device, channel, name, self._stop, self._listeners, tx),
+                                 name="live-sender", daemon=True)
+        self._proc.start()
+        tx.close()
+        try:
+            msg = rx.recv() if rx.poll(timeout) else "did not start in time"
+        except EOFError:
+            msg = f"exited with code {self._proc.exitcode}"
+        if isinstance(msg, str):
+            self.stop()
+            raise RuntimeError(f"Live's own input: {msg}")
+        self.port, self.latency_ms = msg
+        threading.Thread(target=self._watch, args=(on_exit,), name="live-child", daemon=True).start()
+
+    def _watch(self, on_exit) -> None:
+        self._proc.join()
+        if not self._stop.is_set() and on_exit:
+            on_exit(self)
+
+    def listener_count(self) -> int:
+        return self._listeners.value
+
+    def stop(self) -> None:
+        self._stop.set()
+        self._proc.join(3)
+        if self._proc.is_alive():
+            self._proc.terminate()
+            self._proc.join(1)
+
+
+def _child_main(device, channel, name, stop, listeners, conn) -> None:
+    import multiprocessing as mp
+    try:
+        source = DeviceSource(device, channel)
+        sender = LiveSender(source)
+        close = advertise(name, local_ip(), sender.port)
+        sender.start()
+    except (Exception, SystemExit) as e:
+        conn.send(f"{type(e).__name__}: {e}")
+        return
+    conn.send((sender.port, source.latency_ms))
+    parent, last, quiet = mp.parent_process(), -1, 0.0
+    try:
+        while not stop.wait(0.5):
+            listeners.value = sender.listener_count()
+            quiet = quiet + 0.5 if sender.stats.frames == last else 0.0
+            last = sender.stats.frames
+            # input gone (unplugged) or the engine gone: stop, and the engine falls back to its own input
+            if quiet >= 4 or (parent is not None and not parent.is_alive()):
+                return
+    finally:
+        sender.stop()
+        if close:
+            close()
 
 
 # ---------------------------------------------------------------- CLI

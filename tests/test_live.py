@@ -159,8 +159,12 @@ def test_meeting_sends_its_input_while_live_english_is_on(monkeypatch):
 
     monkeypatch.setattr(S, "LiveSender", lambda src, _real=S.LiveSender: _real(src, port=0, bind="127.0.0.1"))
     monkeypatch.setattr(S, "advertise", lambda *a: None)   # no Bonjour from a test
+
+    def no_own_input(*a, **k):
+        raise RuntimeError("no such input")
+    monkeypatch.setattr(S, "ChildSender", no_own_input)    # Live's own input can't open: the meeting's is tapped
     mic = MicSource.__new__(MicSource)
-    mic.tap = None
+    mic.tap, mic.name, mic.wanted, mic._switch_to = None, "Mic", ("", 0), None
     p = Pipeline.__new__(Pipeline)
     p.settings = SimpleNamespace(audio=SimpleNamespace(live_english=True), engine=SimpleNamespace(name="Test"))
     p.worker, p.capturing = SimpleNamespace(source=mic), True
@@ -173,7 +177,7 @@ def test_meeting_sends_its_input_while_live_english_is_on(monkeypatch):
         assert P.unpack(c.recvfrom(2048)[0]).type == P.PacketType.HELLO
         mic.tap(np.full(2400, 0.3, np.float32), 48000)  # what the microphone callback hands on (50 ms)
         assert P.unpack(c.recvfrom(2048)[0]).type == P.PacketType.AUDIO
-        assert p.live_english() == {"on": True, "sending": True, "listeners": 1}
+        assert p.live_english() == {"on": True, "sending": True, "listeners": 1, "low_latency": False}
         c.close()
     finally:
         p.settings.audio.live_english = False   # toggle off: stops, and the input is no longer tapped
@@ -209,3 +213,121 @@ def test_sender_answers_phones_on_ipv6_and_ipv4():
         assert sender.listener_count() == 2
     finally:
         sender.stop()
+
+
+def test_live_prefers_its_own_input_follows_a_switch_and_falls_back(monkeypatch):
+    from types import SimpleNamespace
+
+    import live.sender as S
+    from app.audio_in import MicSource
+    from app.pipeline import Pipeline
+
+    started = []
+
+    class FakeChild:
+        low_latency, port, latency_ms = True, 1, 5.0
+
+        def __init__(self, device, channel, name, on_exit=None):
+            started.append((device, channel))
+            self.on_exit, self.stopped = on_exit, False
+
+        def listener_count(self):
+            return 3
+
+        def stop(self):
+            self.stopped = True
+    monkeypatch.setattr(S, "ChildSender", FakeChild)
+    monkeypatch.setattr(S, "LiveSender", lambda src, _real=S.LiveSender: _real(src, port=0, bind="127.0.0.1"))
+    monkeypatch.setattr(S, "advertise", lambda *a: None)
+    mic = MicSource.__new__(MicSource)
+    mic.tap, mic.name, mic.wanted, mic._switch_to = None, "MacBook Pro Microphone", ("", 0), None
+    p = Pipeline.__new__(Pipeline)
+    p.settings = SimpleNamespace(audio=SimpleNamespace(live_english=True), engine=SimpleNamespace(name="Test"))
+    p.worker, p.capturing = SimpleNamespace(source=mic), True
+    p._sync_live()
+    first = p.live[0]
+    assert started == [("MacBook Pro Microphone", 0)] and mic.tap is None   # the pinned input, not tapped
+    assert p.live_english() == {"on": True, "sending": True, "listeners": 3, "low_latency": True}
+    mic._switch_to = ("Line In", 2)   # chosen during the meeting, not switched yet
+    p._sync_live()
+    assert first.stopped and started[-1] == ("Line In", 2)
+    p._sync_live()
+    assert len(started) == 2          # same input: left running
+    p.live[0].on_exit(p.live[0])      # its input stopped (unplugged): Live goes on, on the meeting's input
+    try:
+        assert p.live is not None and not p.live_english()["low_latency"] and mic.tap is not None
+        p._sync_live()
+        assert len(started) == 2      # stays on the fallback for this meeting
+    finally:
+        p.settings.audio.live_english = False
+        p._sync_live()
+    assert p.live is None and mic.tap is None
+
+
+def test_own_input_process_reports_a_missing_input():
+    from live.sender import ChildSender
+    with pytest.raises(RuntimeError, match="own input"):
+        ChildSender("no input has this name", 0, "Test")
+
+
+def test_child_sends_its_input_until_told_to_stop(monkeypatch):
+    import threading
+    from multiprocessing import Event, Pipe, Value
+
+    import live.sender as S
+    monkeypatch.setattr(S, "DeviceSource", lambda device, channel: ToneSource())
+    monkeypatch.setattr(S, "LiveSender", lambda src, _real=S.LiveSender: _real(src, port=0, bind="127.0.0.1"))
+    monkeypatch.setattr(S, "advertise", lambda *a: None)
+    stop, n = Event(), Value("i", 0)
+    rx, tx = Pipe(duplex=False)
+    t = threading.Thread(target=S._child_main, args=("Mic", 0, "Test", stop, n, tx))
+    t.start()
+    port, _ = rx.recv()
+    c = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    c.settimeout(2)
+    try:
+        _subscribe(c, port)
+        assert {P.unpack(c.recvfrom(2048)[0]).type for _ in range(5)} >= {P.PacketType.HELLO, P.PacketType.AUDIO}
+        time.sleep(0.7)
+        assert n.value == 1
+    finally:
+        c.close()
+        stop.set()
+        t.join(3)
+    assert not t.is_alive()
+
+
+def test_audio_is_marked_as_voice_for_wifi():
+    if not hasattr(socket, "IP_RECVTOS"):
+        pytest.skip("can't read the TOS byte here")
+    sender = LiveSender(ToneSource(), port=0)
+    sender.start()
+    c = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    c.setsockopt(socket.IPPROTO_IP, socket.IP_RECVTOS, 1)
+    c.settimeout(2)
+    try:
+        c.sendto(P.pack(P.Packet(P.PacketType.SUBSCRIBE)), ("127.0.0.1", sender.port))
+        _, anc, _, _ = c.recvmsg(2048, 64)
+        assert [d[0] for lvl, typ, d in anc if typ == socket.IP_TOS] == [0xB8]   # DSCP EF -> WMM voice
+    finally:
+        c.close()
+        sender.stop()
+
+
+def test_tap_path_delay_is_its_prebuffer_not_a_block_more():
+    from live.latency import bench
+    r = bench("tap", seconds=2.5)
+    assert r["clicks"] >= 3 and 55 < r["send_ms"][0] < 66   # was 102.6 ms at 6b217fb
+
+
+def test_clap_gap_found_in_a_recording():
+    from live.latency import clap_gaps
+    sr, rng = 48000, np.random.default_rng(1)
+    x = rng.normal(0, 20, sr * 3)
+    for c in (sr // 2, sr * 2):   # a clap with a 150 ms room tail, then the headphone's copy 87 ms later, quieter
+        tail = rng.normal(0, 1, sr * 15 // 100) * np.exp(-np.arange(sr * 15 // 100) / (sr * 0.03))
+        x[c:c + len(tail)] += 20000 * tail
+        d = c + sr * 87 // 1000
+        x[d:d + len(tail)] += 6000 * tail
+    gaps = clap_gaps(x, sr)
+    assert len(gaps) == 2 and all(abs(g - 87) <= 1.5 for g in gaps)   # to within a millisecond or so
