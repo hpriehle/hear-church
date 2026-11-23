@@ -42,6 +42,15 @@ const canonical = new URL(path, "https://hearchurch.com").href.replace(/\/$/, pa
     <a class="nav-get" href={CTA.href}>{CTA.label}</a>
   </nav>
 </header>
+<!-- Signed in (the hub's session cookie is HttpOnly, so ask the hub): "Sign in" becomes "Account", "Get started" goes.
+     Same as web/account/common.js. -->
+<script is:inline>
+fetch("/api/hc/web/me").then((r) => r.json()).then((me) => {
+  if (!me.signed_in || !me.congregation) return;
+  document.querySelector('.top nav a[href="/start"]').remove();
+  document.querySelector('.top nav a[href="/account"]').textContent = "Account";
+}).catch(() => {});
+</script>
 <main id="main">
   <slot />
 </main>
