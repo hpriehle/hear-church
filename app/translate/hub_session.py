@@ -117,4 +117,5 @@ class HubSession(ApiSession):
         return getattr(e, "message", "") or str(e)
 
     def fatal(self, e: BaseException) -> bool:
-        return isinstance(e, HubError) and e.status in (401, 403)   # this Mac was signed out of Hear Church
+        # 401/403: this Mac was signed out of Hear Church; 400: the conversation is rejected, start a fresh one
+        return isinstance(e, HubError) and e.status in (400, 401, 403)

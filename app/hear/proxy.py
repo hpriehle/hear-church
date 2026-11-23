@@ -14,7 +14,8 @@ Own-key congregations get 409 own_key (they translate straight from the Mac).
 goes to Claude Code with Harrison's login instead of the API key (app/hear/internal.py), at no charge.
 
 Privacy: the speech and its translation pass through memory only. Nothing here stores or logs them: logs carry
-the congregation, sizes, timing and status codes, never a request or reply body or Anthropic's error text.
+the congregation, sizes, timing and status codes, never a request or reply body. Anthropic's error message is logged
+for a 400 only (it names the part of the request it rejects), never passed on to the Mac.
 
 Server key: ANTHROPIC_API_KEY in the hub's environment. Without it → 503 not_configured for credits (everything
 else works, "internal" too).
@@ -137,12 +138,20 @@ async def _translate(request: Request, device: dict[str, Any], cong: dict[str, A
     if internal:
         return await _translate_internal(device, cong, turn, len(body), t0)
     try:
-        params = request_params(turn.model, turn.system, [m.model_dump() for m in turn.messages], turn.effort)
+        messages = [m.model_dump() for m in turn.messages]
+        for m in messages:
+            for b in m["content"] if isinstance(m["content"], list) else ():
+                if b.get("type") == "fallback" and "from_" in b:
+                    b["from"] = b.pop("from_")   # Macs before the 2026-11-22 fix echo the SDK's field name
+        params = request_params(turn.model, turn.system, messages, turn.effort)
         resp = await _anthropic_client(key).beta.messages.create(**params)
     except anthropic.APIError as e:
         status = getattr(e, "status_code", None)
-        log.warning("translate for %s: Anthropic %s %s after %.1fs (%d bytes)", cong["slug"], type(e).__name__,
-                    status or "", time.monotonic() - t0, len(body))
+        why = ""
+        if isinstance(e, anthropic.BadRequestError) and isinstance(e.body, dict):
+            why = ": " + str((e.body.get("error") or {}).get("message", ""))[:300]
+        log.warning("translate for %s: Anthropic %s %s after %.1fs (%d bytes)%s", cong["slug"], type(e).__name__,
+                    status or "", time.monotonic() - t0, len(body), why)
         if isinstance(e, (anthropic.AuthenticationError, anthropic.PermissionDeniedError)):
             log.error("the hub's ANTHROPIC_API_KEY was refused")
             return _no(503, "unavailable", "Translation on credit is down on Hear Church's side.")
@@ -158,7 +167,7 @@ async def _translate(request: Request, device: dict[str, Any], cong: dict[str, A
     u = resp.usage
     log.info("translate for %s: %s, %d bytes in, %s+%s tokens, %.1fs", cong["slug"], turn.model, len(body),
               u.input_tokens, u.output_tokens, time.monotonic() - t0)
-    return JSONResponse(resp.model_dump(mode="json", exclude_none=True, warnings=False))
+    return JSONResponse(resp.model_dump(mode="json", exclude_none=True, by_alias=True, warnings=False))
 
 
 async def _translate_internal(device: dict[str, Any], cong: dict[str, Any], turn: TranslateTurn, size: int,

@@ -325,6 +325,85 @@ async def test_end_to_end_a_mac_without_a_key_translates_a_live_meeting(server, 
     await ws.close()
 
 
+def fallback_reply(text="Jamm ak salaam.") -> dict:
+    """A reply that another model finished after the first declined: it carries a "fallback" block."""
+    d = reply(text).model_dump(mode="json", exclude_none=True)
+    d["content"].insert(0, {"type": "fallback", "from": {"model": "claude-opus-5-5"},
+                            "to": {"model": "claude-sonnet-5-5"}, "trigger": {"type": "refusal", "category": None}})
+    return d
+
+
+def hub_translator(monkeypatch, tmp_path, handler) -> Translator:
+    from app.languages import LANGUAGES
+    from app.translate import router
+
+    class MockHubSession(HubSession):
+        def __init__(self, *a, **k):
+            super().__init__(*a, client=HubClient("https://h.test", "t", mock_hub(handler)), **k)
+    monkeypatch.setitem(router.SESSION_TYPES, "hub", MockHubSession)
+    t = Translator(TranslateCfg(mode="claude", backend="hub"), {}, tmp_path, LANGUAGES["wo"])
+    t.has_claude = True
+    return t
+
+
+async def test_a_fallback_reply_does_not_break_the_conversation(monkeypatch, tmp_path):
+    """harlem-1st, Wolof, 2026-11-22: after a fallback reply the Mac echoed the block's "from" as "from_",
+    so the API refused every later turn with a 400 and translation paused."""
+    sent = []
+
+    def handler(request):        # like the API: the echoed block must say "from"
+        body = json.loads(request.content)
+        sent.append(body)
+        if '"from_"' in json.dumps(body):
+            return httpx.Response(400, json={"error": "bad_request", "message": "The translator refused this request."})
+        return httpx.Response(200, json=fallback_reply() if len(sent) == 1 else reply("Amiin.").model_dump(mode="json"))
+    t = hub_translator(monkeypatch, tmp_path, handler)
+    assert (await t.translate("Peace be with you.")).text == "Jamm ak salaam."
+    for _ in range(4):
+        assert (await t.translate("Amen.")).text == "Amiin."
+    assert sent[1]["messages"][3]["content"][0]["from"] == {"model": "claude-opus-5-5"}
+
+
+async def test_a_rejected_conversation_recovers_on_the_next_sentence(monkeypatch, tmp_path):
+    def handler(request):        # the API refuses every turn of a conversation it can't take
+        if b"bogus" in request.content:
+            return httpx.Response(400, json={"error": "bad_request", "message": "The translator refused this request."})
+        return httpx.Response(200, json=reply("Amiin.").model_dump(mode="json"))
+    t = hub_translator(monkeypatch, tmp_path, handler)
+    assert (await t.translate("Amen.")).text == "Amiin."
+    first = t.active
+    first.messages[-1]["content"].append({"type": "bogus"})
+    r = await t.translate("Amen.")
+    assert r.text is None and "translator error" in r.note
+    assert (await t.translate("Amen.")).text == "Amiin."           # a fresh conversation, not a pause
+    assert t.active is not first and t.active.alive
+
+
+def test_the_hub_echoes_fallback_blocks_as_the_api_wants_them(client, hear, claude, caplog):
+    cong, token = make_cong(hear)
+    go_live(hear, cong, token)
+    claude.replies = [BetaMessage.model_validate(fallback_reply())]
+    r = client.post("/api/hc/translate", json=turn(), headers=auth(token))
+    assert r.json()["content"][0]["from"] == {"model": "claude-opus-5-5"}
+    # a Mac from before the fix sends "from_": the hub puts it right
+    old = turn()
+    old["messages"][1]["content"] = [{**r.json()["content"][0], "from_": {"model": "claude-opus-5-5"}},
+                                     r.json()["content"][-1]]
+    del old["messages"][1]["content"][0]["from"]
+    client.post("/api/hc/translate", json=old, headers=auth(token))
+    block = claude.calls[1]["messages"][1]["content"][0]
+    assert block["from"] == {"model": "claude-opus-5-5"} and "from_" not in block
+    # a 400 logs why (Anthropic names the field, not the words)
+    req = httpx.Request("POST", "https://api.anthropic.com/v1/messages")
+    why = "messages.41.content.0.fallback.from: Field required"
+    claude.replies = [anthropic.BadRequestError("x", response=httpx.Response(400, request=req),
+                                                body={"type": "error", "error": {"type": "invalid_request_error",
+                                                                                 "message": why}})]
+    with caplog.at_level(logging.WARNING, logger="hear"):
+        assert client.post("/api/hc/translate", json=turn(), headers=auth(token)).status_code == 400
+    assert any(why in rec.getMessage() for rec in caplog.records)
+
+
 def test_the_app_picks_the_backend_from_billing(hear, monkeypatch, tmp_path):
     monkeypatch.setattr("app.config.SECRETS_PATH", tmp_path / "none.env")
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)

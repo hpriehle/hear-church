@@ -118,12 +118,14 @@ class ApiSession:
             self.messages.pop()                        # unanswered: keep the conversation well-formed
             self.last_error = self.describe(e)
             if self.fatal(e):
-                self.alive = False                     # a bad key won't get better by retrying this session
+                self.alive = False                     # retrying this session won't help: the router starts a new one
             raise RuntimeError(f"translator error: {self.last_error}") from e
         finally:
             self.pending = None
         # Append the whole reply (thinking and fallback blocks too): the API expects them back unchanged.
-        self.messages.append({"role": "assistant", "content": [b.model_dump(exclude_none=True) for b in resp.content]})
+        # by_alias: a fallback block's "from" is from_ in the SDK, and "from_" gets every later turn a 400.
+        self.messages.append({"role": "assistant",
+                              "content": [b.model_dump(exclude_none=True, by_alias=True) for b in resp.content]})
         self._count(resp.usage)
         if resp.stop_reason == "refusal":
             raise RuntimeError("translator error: declined to translate this sentence")
@@ -141,7 +143,9 @@ class ApiSession:
         return _describe(e)
 
     def fatal(self, e: BaseException) -> bool:
-        return isinstance(e, (anthropic.AuthenticationError, anthropic.PermissionDeniedError))
+        # 400: the API rejects this conversation, so every later turn of it would fail too (hub, 2026-11-22)
+        return isinstance(e, (anthropic.AuthenticationError, anthropic.PermissionDeniedError,
+                              anthropic.BadRequestError))
 
     def _count(self, u: Any) -> None:
         step = Usage(input=u.input_tokens or 0, cache_read=getattr(u, "cache_read_input_tokens", 0) or 0,
