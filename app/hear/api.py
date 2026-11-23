@@ -194,6 +194,12 @@ def setup(settings) -> Hear:
         from . import trial_emails
         if trial_emails.mode() != "off":
             asyncio.get_running_loop().create_task(trial_emails.run_forever())
+        from . import demo
+        if demo.enabled():
+            try:
+                demo.start(db, H.live)
+            except Exception:   # the hub serves real congregations without it
+                log.exception("the demo congregation could not start")
     except RuntimeError:   # no event loop (a plain script): skip
         pass
     return H

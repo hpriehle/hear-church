@@ -1,0 +1,1398 @@
+{
+"source": "\"The Happy Little Girl\" (J. C. Ryle, The Two Bears and Other Sermons for Children), LibriVox, public domain; translated and voiced by the Hear Church pipeline",
+"languages": [
+"fr",
+"es",
+"pt"
+],
+"period_s": 247.83,
+"bitrate_kbps": 32,
+"events": [
+{
+"t": 0.75,
+"lang": "fr",
+"n": 1,
+"text": "Écoutez-moi et je vais vous dire…"
+},
+{
+"t": 0.75,
+"lang": "es",
+"n": 1,
+"text": "Escúchenme y les diré..."
+},
+{
+"t": 0.75,
+"lang": "pt",
+"n": 1,
+"text": "Ouçam-me e eu lhes direi..."
+},
+{
+"t": 1.51,
+"lang": "es",
+"n": 1
+},
+{
+"t": 2.12,
+"lang": "pt",
+"n": 1
+},
+{
+"t": 3.6,
+"lang": "fr",
+"n": 1
+},
+{
+"t": 6.21,
+"lang": "fr",
+"n": 2,
+"text": "L'enfant le plus heureux que j'aie jamais vu était une petite fille que j'ai rencontrée un jour dans un wagon de train."
+},
+{
+"t": 6.21,
+"lang": "es",
+"n": 2,
+"text": "La niña más feliz que he visto fue una pequeña que conocí una vez viajando en un vagón de tren."
+},
+{
+"t": 6.21,
+"lang": "pt",
+"n": 2,
+"text": "A criança mais feliz que já vi foi uma menininha que conheci certa vez viajando num vagão de trem."
+},
+{
+"t": 6.96,
+"lang": "pt",
+"n": 2
+},
+{
+"t": 7.27,
+"lang": "es",
+"n": 2
+},
+{
+"t": 8.36,
+"lang": "fr",
+"n": 2
+},
+{
+"t": 14.24,
+"lang": "fr",
+"n": 3,
+"text": "Nous allions toutes les deux à Londres, et nous avons fait un long trajet ensemble."
+},
+{
+"t": 14.24,
+"lang": "es",
+"n": 3,
+"text": "Ambas íbamos de viaje a Londres, y recorrimos muchísimos kilómetros juntas."
+},
+{
+"t": 14.24,
+"lang": "pt",
+"n": 3,
+"text": "Nós duas íamos para Londres e viajamos muitos quilômetros juntas."
+},
+{
+"t": 14.99,
+"lang": "pt",
+"n": 3
+},
+{
+"t": 15.09,
+"lang": "es",
+"n": 3
+},
+{
+"t": 16.49,
+"lang": "fr",
+"n": 3
+},
+{
+"t": 21.08,
+"lang": "fr",
+"n": 4,
+"text": "Elle n'avait que huit ans, et elle était complètement aveugle."
+},
+{
+"t": 21.08,
+"lang": "es",
+"n": 4,
+"text": "Solo tenía ocho años y era completamente ciega."
+},
+{
+"t": 21.08,
+"lang": "pt",
+"n": 4,
+"text": "Ela tinha só oito anos e era completamente cega."
+},
+{
+"t": 21.83,
+"lang": "es",
+"n": 4
+},
+{
+"t": 21.83,
+"lang": "pt",
+"n": 4
+},
+{
+"t": 22.52,
+"lang": "fr",
+"n": 4
+},
+{
+"t": 26.1,
+"lang": "fr",
+"n": 5,
+"text": "Elle n'avait jamais pu voir, pas du tout."
+},
+{
+"t": 26.1,
+"lang": "es",
+"n": 5,
+"text": "Nunca había podido ver nada."
+},
+{
+"t": 26.1,
+"lang": "pt",
+"n": 5,
+"text": "Ela nunca tinha conseguido enxergar nada."
+},
+{
+"t": 26.85,
+"lang": "es",
+"n": 5
+},
+{
+"t": 27.36,
+"lang": "pt",
+"n": 5
+},
+{
+"t": 28.35,
+"lang": "fr",
+"n": 5
+},
+{
+"t": 31.06,
+"lang": "fr",
+"n": 6,
+"text": "Elle n'avait jamais vu le soleil, ni les étoiles, ni le ciel."
+},
+{
+"t": 31.06,
+"lang": "es",
+"n": 6,
+"text": "Nunca había visto el sol, ni las estrellas, ni el cielo."
+},
+{
+"t": 31.06,
+"lang": "pt",
+"n": 6,
+"text": "Ela nunca tinha visto o sol, as estrelas e o céu."
+},
+{
+"t": 31.86,
+"lang": "es",
+"n": 6
+},
+{
+"t": 32.11,
+"lang": "pt",
+"n": 6
+},
+{
+"t": 32.62,
+"lang": "fr",
+"n": 6
+},
+{
+"t": 36.92,
+"lang": "fr",
+"n": 7,
+"text": "Ni l'herbe, ni les fleurs, ni les arbres, ni les oiseaux, ni toutes ces belles choses que vous voyez chaque jour de votre vie."
+},
+{
+"t": 36.92,
+"lang": "es",
+"n": 7,
+"text": "Ni la hierba, ni las flores, ni los árboles, ni los pájaros, ni todas esas cosas agradables que ustedes ven cada día de su vida."
+},
+{
+"t": 36.92,
+"lang": "pt",
+"n": 7,
+"text": "Nem a grama, as flores, as árvores, os pássaros e todas essas coisas agradáveis que vocês veem todos os dias da vida."
+},
+{
+"t": 37.68,
+"lang": "pt",
+"n": 7
+},
+{
+"t": 37.78,
+"lang": "es",
+"n": 7
+},
+{
+"t": 39.6,
+"lang": "fr",
+"n": 8,
+"text": "Et pourtant, elle était parfaitement heureuse."
+},
+{
+"t": 39.76,
+"lang": "fr",
+"n": 7
+},
+{
+"t": 39.8,
+"lang": "es",
+"n": 8,
+"text": "Pero aun así era muy feliz."
+},
+{
+"t": 39.8,
+"lang": "pt",
+"n": 8,
+"text": "Mesmo assim, ela era muito feliz."
+},
+{
+"t": 44.69,
+"lang": "pt",
+"n": 8
+},
+{
+"t": 45.8,
+"lang": "es",
+"n": 8
+},
+{
+"t": 46.02,
+"lang": "fr",
+"n": 8
+},
+{
+"t": 46.65,
+"lang": "pt",
+"n": 9,
+"text": "Ela estava sozinha, coitadinha."
+},
+{
+"t": 46.79,
+"lang": "es",
+"n": 9,
+"text": "Viajaba sola, pobrecita."
+},
+{
+"t": 46.92,
+"lang": "fr",
+"n": 9,
+"text": "Elle voyageait seule, la pauvre petite."
+},
+{
+"t": 48.76,
+"lang": "es",
+"n": 9
+},
+{
+"t": 48.88,
+"lang": "pt",
+"n": 9
+},
+{
+"t": 50.27,
+"lang": "fr",
+"n": 9
+},
+{
+"t": 52.67,
+"lang": "es",
+"n": 10,
+"text": "No tenía amigos ni parientes que la cuidaran en el viaje y fueran buenos con ella."
+},
+{
+"t": 52.71,
+"lang": "fr",
+"n": 10,
+"text": "Elle n'avait ni amis ni parents pour prendre soin d'elle pendant le voyage et être bons avec elle."
+},
+{
+"t": 53.08,
+"lang": "pt",
+"n": 10,
+"text": "Não tinha amigos nem parentes para cuidar dela na viagem e tratá-la bem."
+},
+{
+"t": 54.11,
+"lang": "es",
+"n": 10
+},
+{
+"t": 54.44,
+"lang": "pt",
+"n": 10
+},
+{
+"t": 55.87,
+"lang": "fr",
+"n": 11,
+"text": "Mais elle était tout à fait heureuse et contente."
+},
+{
+"t": 55.87,
+"lang": "es",
+"n": 11,
+"text": "Pero estaba muy feliz y contenta."
+},
+{
+"t": 56.12,
+"lang": "fr",
+"n": 10
+},
+{
+"t": 56.16,
+"lang": "pt",
+"n": 11,
+"text": "Mas ela estava muito feliz e contente."
+},
+{
+"t": 58.28,
+"lang": "pt",
+"n": 11
+},
+{
+"t": 58.83,
+"lang": "es",
+"n": 11
+},
+{
+"t": 61.06,
+"lang": "fr",
+"n": 11
+},
+{
+"t": 62.51,
+"lang": "fr",
+"n": 12,
+"text": "En montant dans le wagon, elle a dit :"
+},
+{
+"t": 62.6,
+"lang": "es",
+"n": 12,
+"text": "Cuando subió al vagón, dijo:"
+},
+{
+"t": 63.06,
+"lang": "pt",
+"n": 12,
+"text": "Ela disse, ao entrar no vagão:"
+},
+{
+"t": 64.5,
+"lang": "es",
+"n": 12
+},
+{
+"t": 65.01,
+"lang": "pt",
+"n": 12
+},
+{
+"t": 65.5,
+"lang": "fr",
+"n": 12
+},
+{
+"t": 68.21,
+"lang": "fr",
+"n": 13,
+"text": "Dites-moi combien de personnes il y a dans le wagon."
+},
+{
+"t": 68.21,
+"lang": "es",
+"n": 13,
+"text": "Díganme cuántas personas hay en el vagón."
+},
+{
+"t": 68.21,
+"lang": "pt",
+"n": 13,
+"text": "Diga-me quantas pessoas há no vagão."
+},
+{
+"t": 68.96,
+"lang": "es",
+"n": 13
+},
+{
+"t": 69.46,
+"lang": "pt",
+"n": 13
+},
+{
+"t": 72.17,
+"lang": "fr",
+"n": 13
+},
+{
+"t": 75.62,
+"lang": "fr",
+"n": 14,
+"text": "Je suis complètement aveugle, je ne vois rien."
+},
+{
+"t": 75.62,
+"lang": "es",
+"n": 14,
+"text": "Soy completamente ciega y no veo nada."
+},
+{
+"t": 75.62,
+"lang": "pt",
+"n": 14,
+"text": "Eu sou completamente cega e não enxergo nada."
+},
+{
+"t": 76.31,
+"lang": "es",
+"n": 14
+},
+{
+"t": 76.62,
+"lang": "pt",
+"n": 14
+},
+{
+"t": 79.51,
+"lang": "fr",
+"n": 14
+},
+{
+"t": 81.94,
+"lang": "es",
+"n": 15,
+"text": "Un caballero le preguntó si no tenía miedo."
+},
+{
+"t": 82.31,
+"lang": "fr",
+"n": 15,
+"text": "Un monsieur lui a demandé si elle n'avait pas peur."
+},
+{
+"t": 82.34,
+"lang": "pt",
+"n": 15,
+"text": "Um senhor perguntou se ela não tinha medo."
+},
+{
+"t": 83.57,
+"lang": "es",
+"n": 15
+},
+{
+"t": 84.07,
+"lang": "pt",
+"n": 15
+},
+{
+"t": 85.26,
+"lang": "fr",
+"n": 15
+},
+{
+"t": 87.88,
+"lang": "es",
+"n": 16,
+"text": "No, dijo ella, no tengo miedo."
+},
+{
+"t": 88.08,
+"lang": "fr",
+"n": 16,
+"text": "Non, a-t-elle répondu, je n'ai pas peur."
+},
+{
+"t": 88.44,
+"lang": "pt",
+"n": 16,
+"text": "Não, ela disse, não tenho medo."
+},
+{
+"t": 89.31,
+"lang": "es",
+"n": 16
+},
+{
+"t": 89.9,
+"lang": "pt",
+"n": 16
+},
+{
+"t": 90.68,
+"lang": "fr",
+"n": 16
+},
+{
+"t": 93.14,
+"lang": "es",
+"n": 17,
+"text": "Ya he viajado antes, y confío en Dios."
+},
+{
+"t": 93.23,
+"lang": "fr",
+"n": 17,
+"text": "J'ai déjà voyagé, et j'ai confiance en Dieu."
+},
+{
+"t": 93.45,
+"lang": "pt",
+"n": 17,
+"text": "Já viajei antes, e confio em Deus."
+},
+{
+"t": 94.79,
+"lang": "es",
+"n": 17
+},
+{
+"t": 95.6,
+"lang": "pt",
+"n": 17
+},
+{
+"t": 96.99,
+"lang": "fr",
+"n": 17
+},
+{
+"t": 99.41,
+"lang": "fr",
+"n": 18,
+"text": "Et les gens sont toujours très gentils avec moi."
+},
+{
+"t": 99.85,
+"lang": "pt",
+"n": 18,
+"text": "E as pessoas são sempre muito boas comigo."
+},
+{
+"t": 100.01,
+"lang": "es",
+"n": 18,
+"text": "Y la gente siempre es muy buena conmigo."
+},
+{
+"t": 101.35,
+"lang": "es",
+"n": 18
+},
+{
+"t": 101.55,
+"lang": "pt",
+"n": 18
+},
+{
+"t": 101.64,
+"lang": "fr",
+"n": 18
+},
+{
+"t": 104.52,
+"lang": "fr",
+"n": 19,
+"text": "Mais j'ai vite compris pourquoi elle était si heureuse."
+},
+{
+"t": 104.52,
+"lang": "es",
+"n": 19,
+"text": "Pero pronto descubrí por qué era tan feliz."
+},
+{
+"t": 104.52,
+"lang": "pt",
+"n": 19,
+"text": "Mas logo descobri por que ela era tão feliz."
+},
+{
+"t": 105.27,
+"lang": "es",
+"n": 19
+},
+{
+"t": 105.68,
+"lang": "pt",
+"n": 19
+},
+{
+"t": 106.56,
+"lang": "fr",
+"n": 19
+},
+{
+"t": 109.36,
+"lang": "es",
+"n": 20,
+"text": "¿Y qué creen ustedes que era?"
+},
+{
+"t": 109.59,
+"lang": "fr",
+"n": 20,
+"text": "Alors, à votre avis, quelle en était la raison ?"
+},
+{
+"t": 109.64,
+"lang": "pt",
+"n": 20,
+"text": "E o que vocês acham que era?"
+},
+{
+"t": 110.27,
+"lang": "es",
+"n": 20
+},
+{
+"t": 110.97,
+"lang": "pt",
+"n": 20
+},
+{
+"t": 112.07,
+"lang": "fr",
+"n": 20
+},
+{
+"t": 114.44,
+"lang": "pt",
+"n": 21,
+"text": "Ela amava Jesus Cristo, e Jesus Cristo a amava."
+},
+{
+"t": 114.58,
+"lang": "es",
+"n": 21,
+"text": "Ella amaba a Jesucristo, y Jesucristo la amaba a ella."
+},
+{
+"t": 114.62,
+"lang": "fr",
+"n": 21,
+"text": "Elle aimait Jésus-Christ, et Jésus-Christ l'aimait."
+},
+{
+"t": 116.16,
+"lang": "pt",
+"n": 21
+},
+{
+"t": 116.56,
+"lang": "es",
+"n": 21
+},
+{
+"t": 117.15,
+"lang": "fr",
+"n": 21
+},
+{
+"t": 119.24,
+"lang": "es",
+"n": 22,
+"text": "Había buscado a Jesucristo, y lo había encontrado."
+},
+{
+"t": 119.41,
+"lang": "fr",
+"n": 22,
+"text": "Elle avait cherché Jésus-Christ, et elle l'avait trouvé."
+},
+{
+"t": 119.44,
+"lang": "pt",
+"n": 22,
+"text": "Ela tinha buscado Jesus Cristo e O tinha encontrado."
+},
+{
+"t": 121.35,
+"lang": "es",
+"n": 22
+},
+{
+"t": 121.45,
+"lang": "pt",
+"n": 22
+},
+{
+"t": 122.45,
+"lang": "fr",
+"n": 22
+},
+{
+"t": 125.93,
+"lang": "fr",
+"n": 23,
+"text": "J'ai commencé à lui parler de la Bible, et j'ai vite vu qu'elle la connaissait très bien."
+},
+{
+"t": 125.93,
+"lang": "es",
+"n": 23,
+"text": "Empecé a hablarle de la Biblia y pronto vi que sabía mucho de ella."
+},
+{
+"t": 125.93,
+"lang": "pt",
+"n": 23,
+"text": "Comecei a conversar com ela sobre a Bíblia e logo vi que ela conhecia muito."
+},
+{
+"t": 126.68,
+"lang": "pt",
+"n": 23
+},
+{
+"t": 126.98,
+"lang": "es",
+"n": 23
+},
+{
+"t": 127.58,
+"lang": "fr",
+"n": 23
+},
+{
+"t": 128.7,
+"lang": "es",
+"n": 24,
+"text": "Iba a una escuela donde la maestra le leía la Biblia."
+},
+{
+"t": 128.81,
+"lang": "pt",
+"n": 24,
+"text": "Ela frequentava uma escola onde a professora lia a Bíblia para ela."
+},
+{
+"t": 128.82,
+"lang": "fr",
+"n": 24,
+"text": "Elle allait à une école où la maîtresse lui lisait la Bible."
+},
+{
+"t": 131.08,
+"lang": "pt",
+"n": 24
+},
+{
+"t": 131.3,
+"lang": "es",
+"n": 24
+},
+{
+"t": 132.09,
+"lang": "fr",
+"n": 24
+},
+{
+"t": 135.27,
+"lang": "fr",
+"n": 25,
+"text": "C'était une fille sage, et elle se souvenait de ce que sa maîtresse avait lu."
+},
+{
+"t": 135.45,
+"lang": "es",
+"n": 25,
+"text": "Y como era una buena niña, recordaba lo que su maestra le había leído."
+},
+{
+"t": 135.45,
+"lang": "pt",
+"n": 25,
+"text": "E ela era uma boa menina e lembrava o que a professora tinha lido."
+},
+{
+"t": 136.22,
+"lang": "es",
+"n": 25
+},
+{
+"t": 136.23,
+"lang": "pt",
+"n": 25
+},
+{
+"t": 136.4,
+"lang": "fr",
+"n": 25
+},
+{
+"t": 140.13,
+"lang": "fr",
+"n": 26,
+"text": "Chers enfants, vous ne pouvez imaginer combien de choses de la Bible cette pauvre petite aveugle connaissait."
+},
+{
+"t": 140.2,
+"lang": "es",
+"n": 26,
+"text": "Queridos niños, no se imaginan cuántas cosas de la Biblia sabía esta pobre niña ciega."
+},
+{
+"t": 140.55,
+"lang": "pt",
+"n": 26,
+"text": "Queridas crianças, vocês nem imaginam quantas coisas da Bíblia essa pobre menina cega sabia."
+},
+{
+"t": 142.19,
+"lang": "es",
+"n": 26
+},
+{
+"t": 142.39,
+"lang": "pt",
+"n": 26
+},
+{
+"t": 145.58,
+"lang": "fr",
+"n": 26
+},
+{
+"t": 147.98,
+"lang": "es",
+"n": 27,
+"text": "Ojalá todos los adultos de Inglaterra supieran tanto como ella."
+},
+{
+"t": 148.06,
+"lang": "pt",
+"n": 27,
+"text": "Eu só queria que todo adulto da Inglaterra soubesse tanto quanto ela."
+},
+{
+"t": 149.67,
+"lang": "es",
+"n": 27
+},
+{
+"t": 149.78,
+"lang": "pt",
+"n": 27
+},
+{
+"t": 151.34,
+"lang": "fr",
+"n": 27,
+"text": "Je voudrais seulement que chaque adulte en Angleterre en sache autant qu'elle."
+},
+{
+"t": 154.39,
+"lang": "fr",
+"n": 27
+},
+{
+"t": 157.03,
+"lang": "es",
+"n": 28,
+"text": "Pero debo intentar contarles algunas de ellas."
+},
+{
+"t": 157.42,
+"lang": "pt",
+"n": 28,
+"text": "Mas vou tentar contar algumas delas a vocês."
+},
+{
+"t": 157.51,
+"lang": "fr",
+"n": 28,
+"text": "Mais je dois essayer de vous en raconter quelques-unes."
+},
+{
+"t": 159.49,
+"lang": "es",
+"n": 28
+},
+{
+"t": 159.69,
+"lang": "pt",
+"n": 28
+},
+{
+"t": 161.47,
+"lang": "fr",
+"n": 28
+},
+{
+"t": 164.79,
+"lang": "fr",
+"n": 29,
+"text": "Elle m'a parlé du péché, de la façon dont il est entré dans le monde."
+},
+{
+"t": 164.87,
+"lang": "es",
+"n": 29,
+"text": "Me habló del pecado, de cómo entró por primera vez en el mundo."
+},
+{
+"t": 164.87,
+"lang": "pt",
+"n": 29,
+"text": "Ela me falou sobre o pecado, de como ele entrou no mundo."
+},
+{
+"t": 165.63,
+"lang": "pt",
+"n": 29
+},
+{
+"t": 165.71,
+"lang": "es",
+"n": 29
+},
+{
+"t": 167.61,
+"lang": "fr",
+"n": 29
+},
+{
+"t": 172.32,
+"lang": "es",
+"n": 30,
+"text": "Cuando Adán y Eva comieron el fruto prohibido,"
+},
+{
+"t": 172.48,
+"lang": "pt",
+"n": 30,
+"text": "quando Adão e Eva comeram o fruto proibido,"
+},
+{
+"t": 172.51,
+"lang": "fr",
+"n": 30,
+"text": "Quand Adam et Ève ont mangé le fruit défendu,"
+},
+{
+"t": 174.09,
+"lang": "es",
+"n": 30
+},
+{
+"t": 174.18,
+"lang": "pt",
+"n": 30
+},
+{
+"t": 177.16,
+"lang": "fr",
+"n": 30
+},
+{
+"t": 180.73,
+"lang": "fr",
+"n": 31,
+"text": "et comment on le voit maintenant partout."
+},
+{
+"t": 180.73,
+"lang": "es",
+"n": 31,
+"text": "y de cómo ahora se ve por todas partes."
+},
+{
+"t": 180.73,
+"lang": "pt",
+"n": 31,
+"text": "e de como ele agora se vê por toda parte."
+},
+{
+"t": 182.1,
+"lang": "es",
+"n": 31
+},
+{
+"t": 182.97,
+"lang": "pt",
+"n": 31
+},
+{
+"t": 183.18,
+"lang": "fr",
+"n": 31
+},
+{
+"t": 185.85,
+"lang": "fr",
+"n": 32,
+"text": "Oh, a-t-elle dit, il n'y a personne de vraiment bon."
+},
+{
+"t": 185.85,
+"lang": "es",
+"n": 32,
+"text": "Ay, dijo ella, no hay nadie que sea verdaderamente bueno."
+},
+{
+"t": 185.85,
+"lang": "pt",
+"n": 32,
+"text": "Ah, ela disse, não existem pessoas realmente boas."
+},
+{
+"t": 188.1,
+"lang": "pt",
+"n": 32
+},
+{
+"t": 188.8,
+"lang": "es",
+"n": 32
+},
+{
+"t": 189.19,
+"lang": "fr",
+"n": 32
+},
+{
+"t": 191.38,
+"lang": "fr",
+"n": 33,
+"text": "Même les meilleures personnes du monde pèchent chaque jour, bien des fois."
+},
+{
+"t": 191.47,
+"lang": "es",
+"n": 33,
+"text": "Hasta las mejores personas del mundo cometen muchos pecados cada día."
+},
+{
+"t": 191.54,
+"lang": "pt",
+"n": 33,
+"text": "As melhores pessoas do mundo cometem muitos pecados todos os dias."
+},
+{
+"t": 195.01,
+"lang": "pt",
+"n": 33
+},
+{
+"t": 195.2,
+"lang": "es",
+"n": 33
+},
+{
+"t": 196.01,
+"lang": "fr",
+"n": 33
+},
+{
+"t": 199.58,
+"lang": "fr",
+"n": 34,
+"text": "Et je suis sûre que nous perdons tous beaucoup de temps, même si nous ne faisons rien d'autre de mal."
+},
+{
+"t": 199.68,
+"lang": "es",
+"n": 34,
+"text": "Y estoy segura de que todos perdemos mucho tiempo, aunque no hagamos nada más malo."
+},
+{
+"t": 200.03,
+"lang": "pt",
+"n": 34,
+"text": "E tenho certeza de que todos nós desperdiçamos muito tempo, mesmo que não façamos nada mais de errado."
+},
+{
+"t": 201.4,
+"lang": "es",
+"n": 34
+},
+{
+"t": 202.71,
+"lang": "pt",
+"n": 34
+},
+{
+"t": 202.9,
+"lang": "fr",
+"n": 34
+},
+{
+"t": 203.14,
+"lang": "pt",
+"n": 35,
+"text": "Ah, somos todos tão pecadores."
+},
+{
+"t": 203.33,
+"lang": "es",
+"n": 35,
+"text": "Ay, todos somos tan pecadores."
+},
+{
+"t": 203.46,
+"lang": "fr",
+"n": 35,
+"text": "Oh, nous sommes tous de tels pécheurs."
+},
+{
+"t": 206.66,
+"lang": "es",
+"n": 35
+},
+{
+"t": 207.75,
+"lang": "fr",
+"n": 35
+},
+{
+"t": 208.19,
+"lang": "pt",
+"n": 35
+},
+{
+"t": 208.55,
+"lang": "es",
+"n": 36,
+"text": "No hay nadie que no haya cometido muchísimos pecados."
+},
+{
+"t": 208.75,
+"lang": "fr",
+"n": 36,
+"text": "Il n'y a personne qui n'ait commis beaucoup de péchés."
+},
+{
+"t": 208.95,
+"lang": "pt",
+"n": 36,
+"text": "Não há ninguém que não tenha cometido muitos pecados."
+},
+{
+"t": 210.7,
+"lang": "es",
+"n": 36
+},
+{
+"t": 211.29,
+"lang": "pt",
+"n": 36
+},
+{
+"t": 211.52,
+"lang": "fr",
+"n": 36
+},
+{
+"t": 213.24,
+"lang": "fr",
+"n": 37,
+"text": "Ensuite, elle a parlé de Jésus-Christ."
+},
+{
+"t": 213.24,
+"lang": "pt",
+"n": 37,
+"text": "E então ela falou sobre Jesus Cristo."
+},
+{
+"t": 213.43,
+"lang": "es",
+"n": 37,
+"text": "Y luego habló de Jesucristo."
+},
+{
+"t": 214.99,
+"lang": "pt",
+"n": 37
+},
+{
+"t": 215.0,
+"lang": "es",
+"n": 37
+},
+{
+"t": 215.69,
+"lang": "fr",
+"n": 37
+},
+{
+"t": 218.78,
+"lang": "fr",
+"n": 38,
+"text": "Elle m'a parlé de l'agonie dans le jardin de Gethsémané."
+},
+{
+"t": 218.8,
+"lang": "es",
+"n": 38,
+"text": "Me contó de la agonía en el jardín de Getsemaní."
+},
+{
+"t": 219.15,
+"lang": "pt",
+"n": 38,
+"text": "Ela me contou sobre a agonia no Jardim do Getsêmani."
+},
+{
+"t": 220.86,
+"lang": "pt",
+"n": 38
+},
+{
+"t": 221.37,
+"lang": "es",
+"n": 38
+},
+{
+"t": 221.96,
+"lang": "fr",
+"n": 38
+},
+{
+"t": 223.53,
+"lang": "es",
+"n": 39,
+"text": "De cómo sudó gotas de sangre, de cómo los soldados lo clavaron en la cruz."
+},
+{
+"t": 223.62,
+"lang": "fr",
+"n": 39,
+"text": "De ses gouttes de sueur de sang, des soldats qui le clouaient sur la croix."
+},
+{
+"t": 224.23,
+"lang": "pt",
+"n": 39,
+"text": "Sobre Ele suar gotas de sangue, sobre os soldados que O pregaram na cruz."
+},
+{
+"t": 226.47,
+"lang": "es",
+"n": 39
+},
+{
+"t": 227.15,
+"lang": "pt",
+"n": 39
+},
+{
+"t": 227.66,
+"lang": "fr",
+"n": 39
+},
+{
+"t": 229.74,
+"lang": "fr",
+"n": 40,
+"text": "De la lance qui lui perça le côté, d'où sortirent du sang et de l'eau."
+},
+{
+"t": 229.91,
+"lang": "pt",
+"n": 40,
+"text": "Sobre a lança que Lhe perfurou o lado, de onde saíram sangue e água."
+},
+{
+"t": 232.83,
+"lang": "es",
+"n": 40,
+"text": "De la lanza que le traspasó el costado, y de la sangre y el agua que salieron."
+},
+{
+"t": 234.25,
+"lang": "pt",
+"n": 40
+},
+{
+"t": 235.16,
+"lang": "fr",
+"n": 40
+},
+{
+"t": 236.27,
+"lang": "es",
+"n": 40
+},
+{
+"t": 237.93,
+"lang": "es",
+"n": 41,
+"text": "Ay, dijo ella, qué bueno fue de su parte morir por nosotros."
+},
+{
+"t": 238.08,
+"lang": "pt",
+"n": 41,
+"text": "Ah, ela disse, como foi bondoso da parte Dele morrer por nós."
+},
+{
+"t": 238.14,
+"lang": "fr",
+"n": 41,
+"text": "Oh, a-t-elle dit, comme il a été bon de mourir pour nous."
+},
+{
+"t": 241.05,
+"lang": "pt",
+"n": 41
+},
+{
+"t": 241.16,
+"lang": "es",
+"n": 41
+},
+{
+"t": 242.35,
+"lang": "fr",
+"n": 41
+},
+{
+"t": 243.98,
+"lang": "fr",
+"n": 42,
+"text": "Et d'une mort si cruelle…"
+},
+{
+"t": 244.17,
+"lang": "pt",
+"n": 42,
+"text": "E uma morte tão cruel..."
+},
+{
+"t": 244.28,
+"lang": "es",
+"n": 42,
+"text": "Y con una muerte tan cruel..."
+},
+{
+"t": 246.25,
+"lang": "pt",
+"n": 42
+},
+{
+"t": 246.55,
+"lang": "fr",
+"n": 42
+},
+{
+"t": 246.57,
+"lang": "es",
+"n": 42
+}
+]
+}

@@ -19,3 +19,4 @@ def _no_free_trial_unless_asked(request, monkeypatch):
 def _no_trial_emails(monkeypatch):
     """Trial e-mails (app/hear/trial_emails.py) never go out from tests, whatever the shell has set."""
     monkeypatch.delenv("HC_TRIAL_EMAILS", raising=False)
+    monkeypatch.delenv("HC_DEMO", raising=False)   # nor does the demo congregation start (app/hear/demo.py)
