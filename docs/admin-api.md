@@ -271,6 +271,7 @@ One church in one call.
              "balance": {"free_left_min": 0.0, "used_min": 90.0, "metered_min": 90.0, "bought_usd": 20.0, "…": "…"},
              "message": "Credit $17.50 · 3.5 language-hours left.", "…": "…"},
  "live": false, "wifi_only": false, "listeners": 0,
+ "rooms": [],   // live rooms, first started first: [{"room": "Relief Society", "wifi_only": false, "listeners": 4, "session": "20261123-100000"}]; "" = unnamed (live/wifi_only describe the first; listeners add all up)
  "devices": [{"id": 1, "name": "Chapel Mac", "created_at": 1794635908.34, "last_seen": 1794635908.35, "app_version": "1.4.0",
               "revoked_at": null}],
  "emails": [{"email": "bishop@example.org", "main": true, "added_at": 1794635908.33}],

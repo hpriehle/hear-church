@@ -714,8 +714,7 @@ async def change_slug(request: Request, body: SlugChange):
         raise HTTPException(403, "Unknown device: sign in again.")
     if result == "ok":
         log.info("congregation %d moved from /%s to /%s", cong["id"], cong["slug"], slug)
-        s = _hear().live.get_any(cong["id"])
-        if s is not None:
+        for s in _hear().live.all(cong["id"]):
             s.slug = slug
     return _slug_answer(_hear().db.congregation(cong["id"]), request)
 
@@ -1387,12 +1386,13 @@ async def listener_page(slug: str):
 
 def _entry(c: dict[str, Any], now: float) -> dict[str, Any]:
     """One congregation for the nearby list / search: what a phone needs to show a row and compute its distance."""
-    s = _hear().live.get(c["id"])
+    s = _hear().live.get(c["id"])   # the first room started: what older apps show
     nm = next_meeting(c["meeting_times"], c["timezone"])
     soon = bool(nm and nm["starts"] and 0 <= nm["starts"] - now <= SOON_S)
     return {"slug": c["slug"], "name": c["name"], "title": display_name(c), "city": c["city"], "church": c["church"],
             "unit_type": c["unit_type"], "stake": c["stake"], "lat": c["lat"], "lng": c["lng"], "live": s is not None,
             "live_english": bool(s and s.live_english),
+            "rooms": [r.room_public() for r in _hear().live.rooms(c["id"])],
             "starts_soon": soon and s is None, "languages": s.languages_public() if s else [],
             "starts_at": s.started if s else (nm["starts"] if nm else None),
             "next_meeting": {k: nm[k] for k in ("label", "day", "time")} if nm else None}
@@ -1436,15 +1436,15 @@ async def congregation_info(slug: str):
     c = _congregation(slug)
     s = h.live.get(c["id"])
     return {**_public(c), "live": s is not None, "languages": s.languages_public() if s else [],
-            "live_english": bool(s and s.live_english),
+            "live_english": bool(s and s.live_english), "rooms": [r.room_public() for r in h.live.rooms(c["id"])],
             "next_meeting": next_meeting(c["meeting_times"], c["timezone"])}
 
 
 @router.get("/c/{slug}/stream/{code}.mp3")
-async def stream(slug: str, code: str):
+async def stream(slug: str, code: str, room: str | None = Query(default=None, max_length=80)):
     from .. import main
 
-    s = _hear().live.get(_congregation(slug)["id"])
+    s = _hear().live.get(_congregation(slug)["id"], room)
     if s is None or code not in s.offered:
         raise HTTPException(404, "Not live right now.")
     return main.mp3_response(s.streams[code], "Live translation")
@@ -1462,19 +1462,20 @@ async def ws_listen(ws: WebSocket, slug: str):
         hello = await asyncio.wait_for(ws.receive_json(), timeout=10)
     except Exception:
         hello = {}
-    s = h.live.get(c["id"])
+    s = h.live.get(c["id"], ws.query_params.get("room"))
     init: dict[str, Any] = {
         "type": "init", "boot": h.live.started, "server_time": time.time(),
         "congregation": {"name": display_name(c), "church": c["church"], "slug": c["slug"]},
         "next_meeting": next_meeting(c["meeting_times"], c["timezone"]),
-        "session": None, "live": False, "lang": "", "on": True, "languages": [], "history": []}
+        "session": None, "live": False, "lang": "", "on": True, "languages": [], "history": [],
+        "rooms": [r.room for r in h.live.rooms(c["id"])]}   # live rooms: the page offers a choice when 2+
     if s is None:  # not live: wait on the congregation's room; the page reloads when a session starts
         await h.live.waiting_hub(c["id"]).serve(ws, [init])
         return
     lang = hello.get("lang") if hello.get("lang") in s.offered else s.offered[0]
     same = hello.get("boot") == h.live.started and hello.get("session") == s.code and hello.get("lang") == lang
     last = int(hello.get("last_seq") or 0) if same else 0
-    init.update(session=s.code, live=True, lang=lang, languages=s.languages_public(), **s.listen_state(),
+    init.update(session=s.code, live=True, room=s.room, lang=lang, languages=s.languages_public(), **s.listen_state(),
                 history=s.hubs[lang].replay_after(last))
     await s.hubs[lang].serve(ws, [init])
 
@@ -1521,12 +1522,14 @@ async def admin_list(request: Request):
     for a in h.db.aliases():
         aliases.setdefault(a["congregation_id"], []).append(a)
     for c in h.db.list_congregations():
-        s = h.live.get_any(c["id"])
+        rooms = h.live.all(c["id"])
+        s = rooms[0] if rooms else None
         out.append({**{k: c[k] for k in ("id", "slug", "church", "name", "unit_type", "stake", "address", "email",
                                          "email_verified", "hidden", "created_at", "billing")},
                     "devices": len(h.db.devices(c["id"])), "live": s is not None,
                     "wifi_only": bool(s and s.private),
-                    "listeners": s.listeners() if s else 0,
+                    "listeners": sum(r.listeners() for r in rooms),
+                    "rooms": [{"room": r.room, "wifi_only": r.private, "listeners": r.listeners()} for r in rooms],
                     "last_session": (h.db.sessions(c["id"]) or [{}])[-1].get("started_at"),
                     "balance": (b := h.db.balance(c["id"])),
                     "free_trial": admin.trial_status(b.get("trial")),
@@ -1614,7 +1617,6 @@ async def admin_hide(request: Request, cid: int):
     hidden = bool((await request.json()).get("hidden", True))
     if not h.db.set_hidden(cid, hidden):
         raise HTTPException(404)
-    s = h.live.get_any(cid)
-    if hidden and s is not None:
+    for s in h.live.all(cid) if hidden else []:
         h.live.end(s, why="This congregation was hidden by the administrator.")  # it stops being live
     return {"ok": True, "hidden": hidden}

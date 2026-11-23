@@ -399,7 +399,8 @@ async def admin_congregation(request: Request, cid: int, meetings: int = Query(d
     c = h.db.congregation(cid)
     if c is None:
         raise HTTPException(404, "No such congregation.")
-    s = h.live.get_any(cid)
+    rooms = h.live.all(cid)
+    s = rooms[0] if rooms else None
     rows = ledger(h, cid)
     by_session = {r["session_id"]: r for r in rows if r["kind"] == "usage"}
     recent = []
@@ -419,7 +420,9 @@ async def admin_congregation(request: Request, cid: int, meetings: int = Query(d
                          "title": api.display_name(c),
                          "aliases": [x["slug"] for x in h.db.aliases(cid)]},
         "billing": api.billing_info(c),
-        "live": s is not None, "wifi_only": bool(s and s.private), "listeners": s.listeners() if s else 0,
+        "live": s is not None, "wifi_only": bool(s and s.private), "listeners": sum(r.listeners() for r in rooms),
+        "rooms": [{"room": r.room, "wifi_only": r.private, "listeners": r.listeners(), "session": r.code}
+                  for r in rooms],
         "devices": _devices(h, cid),
         "emails": h.db.emails(cid),
         "own_key_codes": h.db.own_key_codes(cid),

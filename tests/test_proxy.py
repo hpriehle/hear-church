@@ -70,7 +70,7 @@ def turn(text=SPEECH, model="claude-opus-5-5", effort="low"):
 def go_live(hear, cong, token):
     """A meeting of this Mac live on the hub (what Live._start leaves behind)."""
     did = hear.db.device_by_token(token)["id"]
-    hear.live.sessions[cong["id"]] = NS(device_id=did)
+    hear.live.sessions[(cong["id"], "")] = NS(device_id=did)
     return did
 
 

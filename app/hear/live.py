@@ -8,11 +8,12 @@ An engine (the congregation's Mac) connects to /ws/engine with "Authorization: B
   engine → hub   {"type": "hello", name, languages, stream, busy, app_version, platform}   (languages = every language it can
                      produce; the binary frames index into this list; stream must match this server's)
                  {"type": "session_start", languages, targets?, speakers?, speaker?, passthrough?, trial?, resume?,
-                     private?}   targets (V3, else languages) = the ones offered = the listen pills, in that order;
+                     private?, room?}   targets (V3, else languages) = the ones offered = the listen pills, in that order;
                      speakers = the languages spoken at the microphone; passthrough (V3) = a listener in a speaker
                      language gets the original (never "listen in the room"); resume = the session code from an
                      earlier "session_started" (reconnect within the grace); private = a "this Wi-Fi only" meeting;
-                     live_english = the computer sends the room audio to phones on its Wi-Fi (free, never metered)
+                     live_english = the computer sends the room audio to phones on its Wi-Fi (free, never metered);
+                     room = the room this computer's meeting is in ("Relief Society"; "" = unnamed, what older apps send)
                  {"type": "languages", languages, targets?, speakers?, live_english?}   (changed during the meeting)
                  {"type": "hub", lang, msg, remember}  (a caption etc. for that language's listeners)
                  binary: one byte = index into hello.languages, then MP3 bytes
@@ -25,7 +26,10 @@ An engine (the congregation's Mac) connects to /ws/engine with "Authorization: B
                                                                        langs = {code: [stream, captions]}
                  {"type": "meter_ok", session, seqs, unknown}   the items stored (resent ones too); unknown = no
                      such session here, so the engine drops that report
-A second device starting while the congregation is live is refused. If the engine's link drops the
+Rooms (docs/rooms.md): a congregation may be live in several rooms at once, one computer per room; a second device
+starting in a room that is already live is refused. Each room is its own session (its own code, listeners and meter
+against the congregation's one balance). Listeners name a room (?room=); without one they get the first room started,
+which is all older apps know. If the engine's link drops the
 session stays open for hearchurch.grace_s (60 s) so a reconnect can resume it, then it ends.
 Credits: a new meeting of a credit-billed congregation with nothing left is refused here (`_start`, through
 Database.can_start); a running meeting, or one resuming after a drop or a hub restart, never is. Resuming after
@@ -36,7 +40,7 @@ needs the hub for translation on credit (app/hear/proxy.py) and its meter. Such 
 is recorded and metered like any other, but `get` (every public route: the listing, search, the congregation page,
 the streams and the listener socket) never returns it, nothing is published to waiting phones, captions and audio
 from the engine are dropped, and no listener counts are sent back (the Mac counts its own phones and meters only
-the languages they hear). `get_any` (the proxy, the admin) sees both kinds.
+the languages they hear). `all` (the proxy, the admin) sees both kinds.
 """
 from __future__ import annotations
 
@@ -59,6 +63,15 @@ _SKIP_KINDS = {"languages", "lang_state", "session", "status", "clip"}
 
 LISTENERS_EVERY_S = 5.0   # how often a live session tells its engine how many phones listen
 METER_MAX_ITEMS = 500     # items taken from one meter message (the engine sends far fewer)
+
+
+def room_name(v: Any) -> str:
+    """A room name as typed, tidied: "  Relief   Society " → "Relief Society" ("" = unnamed)."""
+    return " ".join(str(v or "").split())[:40]
+
+
+def room_key(v: Any) -> str:
+    return room_name(v).casefold()
 
 
 def _targets(m: dict[str, Any]) -> list[str]:
@@ -105,6 +118,7 @@ class LiveSession:
         self.speakers: list[str] = []   # V3: every language spoken at the microphone
         self.passthrough = False        # V3: phones in a speaker language get the original, never paused
         self.live_english = False       # the computer streams the room audio on its Wi-Fi: phones may offer it
+        self.room = ""                  # the room's name as the operator typed it ("" = unnamed)
         self.started = time.time()
         self.grace = None  # timer handle while the engine is away
         self.hubs = {c: Hub(f"live-{self.slug}-{c}", history=300, queue_size=400) for c in all_langs}
@@ -116,6 +130,11 @@ class LiveSession:
     def listen_state(self) -> dict[str, Any]:
         """What a listener page needs besides the pills: who speaks, and whether the original is passed through."""
         return {"speaker": self.speaker, "speakers": self.speakers or [self.speaker], "passthrough": self.passthrough}
+
+    def room_public(self) -> dict[str, Any]:
+        """One live room for the listener APIs (a picker shows them only when two or more are live)."""
+        return {"room": self.room, "languages": self.languages_public(), "live_english": self.live_english,
+                "starts_at": self.started}
 
     def listeners(self) -> int:
         return sum(b.listeners for b in self.streams.values())
@@ -137,19 +156,29 @@ class Live:
     def __init__(self, db: Database, stream, grace_s: float = 60.0):
         self.db, self.stream, self.grace_s = db, stream, grace_s
         self.after_end = None   # called with the congregation id when a meeting ends (auto top-up, app/hear/payments.py)
-        self.sessions: dict[int, LiveSession] = {}
+        self.sessions: dict[tuple[int, str], LiveSession] = {}   # (congregation id, room key), in start order
         self.waiting: dict[int, Hub] = {}   # listeners of a congregation that isn't live yet
         self.started = time.time()          # "boot": caption numbers restart when the server does
         self.links: set[Link] = set()       # engine connections now (a revoked device's are closed)
 
-    def get(self, cid: int) -> LiveSession | None:
-        """The congregation's public live session, for listeners and listings (never a private one)."""
-        s = self.sessions.get(cid)
-        return None if s is None or s.private else s
+    def all(self, cid: int) -> list[LiveSession]:
+        """Every session of the congregation under way, private ones included, first started first."""
+        return [s for (c, _), s in self.sessions.items() if c == cid]
+
+    def rooms(self, cid: int) -> list[LiveSession]:
+        """The congregation's public live sessions, for listeners and listings (never a private one)."""
+        return [s for s in self.all(cid) if not s.private]
+
+    def get(self, cid: int, room: str | None = None) -> LiveSession | None:
+        """The public live session in `room`; without a room the first one started (what older apps get)."""
+        rooms = self.rooms(cid)
+        if room is None:
+            return rooms[0] if rooms else None
+        return next((s for s in rooms if s.room.casefold() == room_key(room)), None)
 
     def get_any(self, cid: int) -> LiveSession | None:
-        """Any session under way, private ones included (translation on credit, admin)."""
-        return self.sessions.get(cid)
+        """The first session under way, private ones included (admin)."""
+        return next(iter(self.all(cid)), None)
 
     def waiting_hub(self, cid: int) -> Hub:
         if cid not in self.waiting:
@@ -249,7 +278,9 @@ class Live:
         offered = [c for c in _targets(m) if c in link.languages]
         if not offered:
             return refuse("Choose at least one language.")
-        old = self.sessions.get(cong["id"])
+        room = room_name(m.get("room"))
+        key = (cong["id"], room.casefold())
+        old = self.sessions.get(key)
         if old is not None:
             if old.link is link:
                 return refuse("This meeting is already started.")
@@ -265,8 +296,10 @@ class Live:
                 self.end(old)  # the same Mac starts a fresh meeting
             else:
                 who = old.link.name if old.link else "another Mac"
-                return refuse(f"{cong['name']} is already live (started on {who})."
-                              + (" It may be reconnecting: try again in a minute." if old.link is None else ""))
+                return refuse(f"{cong['name']}{f' ({old.room})' if room else ''} is already live (started on {who})."
+                              + (" It may be reconnecting: try again in a minute." if old.link is None else
+                                 " To run another meeting at the same time, give this one a room name." if not room
+                                 else ""))
         # a meeting already under way (its link dropped past the grace, or this server restarted) is never refused,
         # but only the Mac that started it may carry it on
         resuming = bool(m.get("resume")) and self.db.recent_session(cong["id"], str(m["resume"])[:40],
@@ -275,7 +308,11 @@ class Live:
             b = self.db.balance(cong["id"])
             owed = f"-${-b['balance_usd']:.2f}" if b["balance_usd"] < 0 else f"${b['balance_usd']:.2f}"
             return refuse(f"{cong['name']} is out of credit (balance {owed}). Buy credit to start the next meeting.")
-        code = time.strftime("%Y%m%d-%H%M%S")
+        code = base = time.strftime("%Y%m%d-%H%M%S")
+        n = 1
+        while any(x.code == code for x in self.all(cong["id"])):   # two rooms started in the same second
+            n += 1
+            code = f"{base}-{n}"
         db_id = self.db.start_session(cong["id"], offered, bool(m.get("trial")), code=code, billing=cong["billing"],
                                      device_id=link.device["id"])
         s = LiveSession(cong, link, db_id, code, offered, link.languages, self.stream)
@@ -284,7 +321,8 @@ class Live:
         s.passthrough = bool(m.get("passthrough"))
         s.live_english = bool(m.get("live_english"))
         s.private = bool(m.get("private"))
-        self.sessions[cong["id"]] = s
+        s.room = room
+        self.sessions[key] = s
         link.session = s
         link.send({"type": "session_started", "session": code, "resumed": False})
         if s.private:   # nothing to tell phones here: they listen on the Mac
@@ -293,6 +331,7 @@ class Live:
         for c, h in s.hubs.items():
             h.publish({"type": "session", "session": code, "live": True})
         self.waiting_hub(cong["id"]).publish({"type": "reload"})
+        self._rooms_changed(cong["id"])
         log.info("%s is live (%s) on %s", cong["slug"], ", ".join(offered), link.name)
 
     def _resume(self, s: LiveSession, link: Link, offered: list[str]) -> None:
@@ -314,6 +353,13 @@ class Live:
         new = [c[:8] for c in m["speakers"] if isinstance(c, str)][:20]
         changed, s.speakers = new != s.speakers, new
         return changed
+
+    def _rooms_changed(self, cid: int) -> None:
+        """Tell every phone of the congregation which rooms are live (a room picker appears at two)."""
+        names = [s.room for s in self.rooms(cid)]
+        for s in self.rooms(cid):
+            for h in s.hubs.values():
+                h.publish({"type": "rooms", "rooms": names})
 
     def _announce_speaker(self, s: LiveSession) -> None:
         if not s.private:
@@ -385,9 +431,10 @@ class Live:
     def end(self, s: LiveSession, notify: bool = True, why: str = "The server ended this session.") -> None:
         """Close a session. notify: tell the engine, if it is connected, so it stops sending (not needed when
         the engine itself asked)."""
-        if self.sessions.get(s.cid) is not s:
+        key = (s.cid, s.room.casefold())
+        if self.sessions.get(key) is not s:
             return
-        del self.sessions[s.cid]
+        del self.sessions[key]
         if s.grace:
             s.grace.cancel()
         if s.link is not None:
@@ -399,6 +446,7 @@ class Live:
             h.publish({"type": "status", "live": False})
         for b in s.streams.values():
             b.close_all()
+        self._rooms_changed(s.cid)
         log.info("%s session ended", s.slug)
         if self.after_end is not None:
             try:

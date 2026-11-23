@@ -28,7 +28,7 @@ def test_the_trial_ending_by_hours_mid_meeting_never_cuts_it_off(client, hear, c
     b = hear.db.balance(cong["id"])
     assert b["trial"]["active"] is False and b["free_left_min"] == 0 and b["balance_min"] == 0 and not b["can_start"]
     assert client.post("/api/hc/translate", json=turn(), headers=auth(token)).status_code == 200   # goes on
-    del hear.live.sessions[cong["id"]]                                # it ended a while ago: the next one waits
+    del hear.live.sessions[(cong["id"], "")]                                # it ended a while ago: the next one waits
     hear.db._x("UPDATE sessions SET ended_at = ? WHERE congregation_id = ?", (time.time() - 3600, cong["id"]))
     r = client.post("/api/hc/translate", json=turn(), headers=auth(token))
     assert r.status_code == 402 and r.json()["error"] == "out_of_credit"

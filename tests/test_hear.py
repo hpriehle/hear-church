@@ -558,7 +558,7 @@ def hear_live_session(hear, cong, link, languages):
 
     s = LiveSession(cong, link, hear.db.start_session(cong["id"], languages), "20261102-100000", languages, languages,
                     main.S.settings.stream)
-    hear.live.sessions[cong["id"]] = s
+    hear.live.sessions[(cong["id"], "")] = s
     return s
 
 

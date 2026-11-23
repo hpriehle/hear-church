@@ -84,8 +84,8 @@ def may_translate(device: dict[str, Any], cong: dict[str, Any]) -> JSONResponse 
     h = hear_api._hear()
     if cong["billing"] not in ("credits", "internal"):
         return _no(409, "own_key", "This congregation translates with its own API key.")
-    live = h.live.get_any(cong["id"])   # private ("this Wi-Fi only") sessions too
-    if live is not None and live.device_id == device["id"]:
+    # private ("this Wi-Fi only") sessions too, in any room
+    if any(s.device_id == device["id"] for s in h.live.all(cong["id"])):
         return None                       # a meeting under way is never cut off
     if h.db.ended_lately(cong["id"], device["id"], TRAILING_S):
         return None
