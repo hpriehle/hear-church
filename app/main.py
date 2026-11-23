@@ -50,7 +50,7 @@ EDITABLE = {
     "translate": {"mode", "claude_model", "claude_effort", "claude_timeout_s", "ollama_model", "claude_session_turns"},
     "tts": {"engine", "voice", "rate", "volume", "speed"},
     "backlog": {"speedup_start_s", "speedup_full_s", "max_speed", "condense_on_s", "condense_off_s", "drop_above_s"},
-    "server": {"lan_ip", "use_public_url", "sharing"},
+    "server": {"lan_ip", "use_public_url", "sharing", "room"},
     "engine": {"use"},
     "stt": {"language"},
     "support": {"share_logs"},
@@ -284,8 +284,7 @@ def full_status() -> dict[str, Any]:
         "live_english": S.pipeline.live_english(),
         # Where the engine listens. Turning local sharing on or off only takes effect after an engine restart.
         "listening_on": S.bind_host or None,
-        "restart_required": bool(S.app_mode and S.bind_host and
-                                 (S.settings.server.sharing == "local") != (S.bind_host != "127.0.0.1")),
+        "restart_required": bool(S.app_mode and S.settings.server.sharing == "local" and S.bind_host == "127.0.0.1"),
     }
 
 
@@ -639,6 +638,8 @@ def _role(host: str | None, headers, query, cookies) -> str | None:
     proxied = any(h in headers for h in _PROXY_HEADERS)
     if not proxied and host and host.split("%")[0] in S.local_addrs:
         return OPERATOR
+    if S.app_mode:   # the app's control pages stay on this computer, whatever the password (it listens on the Wi-Fi)
+        return None
     # a server (Siteboard) sends the password in a header, so it stays out of URLs and access logs
     given = headers.get("x-operator-key") or query.get("key") or query.get("pin") or ""
     cookie = cookies.get("op_pin") or ""
@@ -776,7 +777,12 @@ def _may_listen(host: str | None, headers, cookies) -> bool:
         return True
     import hmac
 
-    return local_sharing() and hmac.compare_digest(cookies.get(LISTEN_COOKIE, ""), S.listen_key)
+    return wifi_fallback() or (local_sharing() and hmac.compare_digest(cookies.get(LISTEN_COOKIE, ""), S.listen_key))
+
+
+def wifi_fallback() -> bool:
+    """The server is lost during an online meeting: phones on this Wi-Fi listen here, no key (docs/rooms.md)."""
+    return isinstance(S.engine_client, PublishClient) and S.engine_client.lost_server()
 
 
 def require_listener(request: Request) -> None:

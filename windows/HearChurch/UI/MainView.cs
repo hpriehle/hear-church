@@ -17,6 +17,10 @@ public sealed class MainView : Grid
     private readonly List<Slot> _slots = new();
     private readonly LevelMeter _meter = new(140);
     private readonly TextBlock _elapsed = Ui.T("", Ui.Body, Ui.Secondary, wrap: false);
+    /// <summary>The room this PC's meeting is in, typed before Start and remembered: only for several meetings at once
+    /// (one computer per room; docs/rooms.md). Built once, so typing never loses focus on a refresh.</summary>
+    private readonly TextBox _room = new() { PlaceholderText = "Room (optional)", Width = 150 };
+    private bool _roomLoaded;   // the saved name was shown (the engine's settings can arrive after this page)
     private readonly Slot _main;
     private TranscriptView? _transcript;
     private LanguageSelector? _bigSelector, _smallSelector;
@@ -75,6 +79,9 @@ public sealed class MainView : Grid
     public void Refresh()
     {
         foreach (var s in _slots) s.Refresh();
+        if (!_roomLoaded && _model.Room.Length > 0) { _roomLoaded = true; _room.Text = _model.Room; }
+        _room.IsEnabled = !_model.Running;
+        _room.Visibility = _model.LocalSharing ? Visibility.Collapsed : Visibility.Visible;
         _main.Refresh();
         _transcript?.Refresh();
         _bigSelector?.Refresh();
@@ -155,7 +162,7 @@ public sealed class MainView : Grid
     private UIElement TopBar()
     {
         var g = new Grid { Padding = new Thickness(16, 10, 16, 10), ColumnSpacing = 16 };
-        foreach (var w in new[] { GridLength.Auto, GridLength.Auto, GridLength.Auto, new GridLength(1, GridUnitType.Star), GridLength.Auto, GridLength.Auto, GridLength.Auto, GridLength.Auto, GridLength.Auto })
+        foreach (var w in new[] { GridLength.Auto, GridLength.Auto, GridLength.Auto, GridLength.Auto, new GridLength(1, GridUnitType.Star), GridLength.Auto, GridLength.Auto, GridLength.Auto, GridLength.Auto, GridLength.Auto })
             g.ColumnDefinitions.Add(new ColumnDefinition { Width = w });
         var col = 0;
         void Put(UIElement e) { SetColumn((FrameworkElement)e, col++); ((FrameworkElement)e).VerticalAlignment = VerticalAlignment.Center; g.Children.Add(e); }
@@ -163,6 +170,14 @@ public sealed class MainView : Grid
         Put(Slot(() => $"{_model.Running}|{_model.CanStart}", StartButton));
         Put(Ui.Row(8, Slot(MeetingStateKey, MeetingState), _elapsed));
         Put(Ui.Row(6, Ui.Icon("", 14, Ui.Secondary), _meter));   // Microphone
+        Ui.Tip(_room, "Only for several meetings at once: give each computer its own room, such as Relief Society.");
+        _room.TextChanged += async (_, _) =>
+        {
+            if (!_roomLoaded && _room.Text.Length == 0) return;
+            _roomLoaded = true;
+            if (_room.Text != _model.Room) await _model.SetRoom(_room.Text);
+        };
+        Put(_room);
         col++;   // spacer
         Put(Slot(() => $"{_model.Listeners}|{_model.Running}", () =>
             Ui.Label($"{_model.Listeners} listening", "", _model.Running ? Ui.Primary : Ui.Secondary)));   // People

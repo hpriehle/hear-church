@@ -40,6 +40,7 @@ targets:
         NSLocalNetworkUsageDescription: With Live on, phones on this Wi-Fi hear the room audio from this Mac.
         NSBonjourServices:
           - _hearchurch-live._udp
+          - _hearchurch._tcp
         CFBundleIconName: AppIcon
         NSAppTransportSecurity:
           NSAllowsLocalNetworking: true

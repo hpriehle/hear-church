@@ -46,6 +46,7 @@ private struct TopBar: View {
         HStack(spacing: 16) {
             StartButton()
             MeetingState()
+            if !model.localSharing { RoomField() }
             HStack(spacing: 6) {
                 Image(systemName: "mic.fill").foregroundStyle(.secondary)
                 Group {
@@ -116,6 +117,30 @@ private struct StartButton: View {
         .confirmationDialog("Stop translating for every listener?", isPresented: $confirmStop) {
             Button("Stop meeting", role: .destructive) { Task { await model.stopMeeting() } }
         }
+    }
+}
+
+/// The room this Mac's meeting is in, typed before Start and remembered. Only needed when the congregation runs
+/// several meetings at once (one computer per room); phones then choose the room first (docs/rooms.md).
+private struct RoomField: View {
+    @EnvironmentObject var model: AppModel
+    @State private var text = ""
+    @State private var loaded = false   // the saved name was shown (the engine's settings can arrive after this view)
+
+    var body: some View {
+        TextField("Room (optional)", text: $text)
+            .textFieldStyle(.roundedBorder)
+            .frame(width: 150)
+            .disabled(model.running)
+            .help("Only for several meetings at once: give each computer its own room, such as Relief Society.")
+            .onAppear { if !model.room.isEmpty { text = model.room; loaded = true } }
+            .onChange(of: model.room) { _, saved in if !loaded { text = saved; loaded = true } }
+            .task(id: text) {   // saved once typing pauses
+                try? await Task.sleep(for: .milliseconds(400))
+                guard !Task.isCancelled, loaded || !text.isEmpty, text != model.room else { return }
+                loaded = true
+                await model.setRoom(text)
+            }
     }
 }
 

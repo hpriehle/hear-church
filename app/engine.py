@@ -36,7 +36,8 @@ log = logging.getLogger("engine")
 
 PCM_RATE = 16000          # what the hub forwards: speech recognition needs no more
 DONE_TIMEOUT_S = 90.0     # a stopped meeting still finishing on the engine
-BILLING_TYPES = "credits,own_key,internal"   # sent to the hub as X-HC-Billing-Types: the types this code knows
+BILLING_TYPES = "credits,own_key,internal"
+WIFI_TYPE = "_hearchurch._tcp.local."   # a computer serving phones on its Wi-Fi while the server is lost (docs/rooms.md)   # sent to the hub as X-HC-Billing-Types: the types this code knows
 
 
 def _m():
@@ -498,6 +499,9 @@ class PublishClient(EngineClient):
     def info(self) -> dict[str, Any]:
         public = self.running and not self.private
         notice = self.notice
+        if self.lost_server():
+            notice = ("Can't reach Hear Church's server. Phones on this Wi-Fi with the Hear Church app keep listening "
+                      "to this computer. The meeting goes on and returns to the server by itself.")
         if not notice and self.private_wanted() and not self.connected and _m().S.settings.translate.backend == "hub":
             notice = ("No internet: translation on Hear Church credit needs it, also for a meeting on this Wi-Fi "
                       "only. Phones can still connect, but nothing is translated until the internet is back.")
@@ -505,6 +509,43 @@ class PublishClient(EngineClient):
                 "billing_link": self.running and self.private, "notice": notice,
                 "listeners": self.listeners if public else {"stream": 0, "captions": 0},
                 "listeners_by_lang": self.listeners_by_lang if public else {}}
+
+    def lost_server(self) -> bool:
+        """An online meeting runs here but the server can't be reached: phones on this Wi-Fi listen on this computer
+        (main._may_listen, announced by Bonjour as WIFI_TYPE) until the link is back (docs/rooms.md)."""
+        if not _m().S.app_mode or self.connected or self.private_wanted():
+            return False
+        a = _activity()
+        return bool(a.running and not _is_talk(a))
+
+    async def _wifi_fallback(self) -> None:
+        """Announce this computer on the Wi-Fi while the server is lost, so the phone app finds it."""
+        close = None
+        try:
+            while True:
+                await asyncio.sleep(1.0)
+                if self.lost_server() and close is None:
+                    log.warning("server lost during the meeting: phones on this Wi-Fi listen here")
+                    close = self._advertise() or (lambda: None)
+                elif close is not None and not self.lost_server():
+                    log.info("server back (or meeting over): phones go back to it")
+                    close()
+                    close = None
+        finally:
+            if close is not None:
+                close()
+
+    def _advertise(self):
+        from live.sender import advertise, local_ip
+
+        srv = _m().S.settings.server
+        props = {"v": "1", "slug": urlparse(srv.public_url).path.strip("/"), "room": srv.room,
+                 "session": self.session_code}
+        try:
+            return advertise(self.name, local_ip(), srv.port, WIFI_TYPE, props)
+        except Exception as e:   # never stops the meeting
+            log.warning("Bonjour announce failed: %s", e)
+            return None
 
     @staticmethod
     def private_wanted() -> bool:
@@ -568,10 +609,12 @@ class PublishClient(EngineClient):
 
     async def run_forever(self) -> None:
         health = asyncio.create_task(self._health_loop())
+        fallback = asyncio.create_task(self._wifi_fallback())
         try:
             await super().run_forever()
         finally:
             health.cancel()
+            fallback.cancel()
 
     async def _post_health(self, body: dict[str, Any]) -> int:
         return (await self.hub_api("POST", "/api/hc/health", body))[0]
@@ -693,7 +736,7 @@ class PublishClient(EngineClient):
         """A chunk of speech went out in `langs`: keep it for the hub's meter if someone hears it in this session.
         Someone = a phone on the hub, or (online meetings too) a listener on this Mac itself: its own listening
         page or stream, translated through the hub's proxy like the rest (docs/riga-metering-2026-11-15.md)."""
-        if not (self.running and self.session_code and seconds > 0):
+        if not ((self.running or self.lost_server()) and self.session_code and seconds > 0):
             return
         pool = self.heard if self.private else self.heard | self._local_heard()
         heard = sorted(c for c in langs if c in pool)
@@ -758,7 +801,7 @@ class PublishClient(EngineClient):
                 # docs/v3-languages.md: "languages" (= targets) and "speaker" are what hubs before V3.2 read.
                 start = {"type": "session_start", "languages": self._offered, "resume": self.session_code,
                          "targets": self._offered, "speakers": self._speakers, "speaker": self._legacy_speaker(),
-                         "passthrough": True, "live_english": self._live}
+                         "passthrough": True, "live_english": self._live, "room": _m().S.settings.server.room}
                 if local:
                     start["private"] = True
                 self._send(start)

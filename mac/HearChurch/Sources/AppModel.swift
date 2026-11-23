@@ -114,6 +114,13 @@ final class AppModel: ObservableObject {
         await engine.set(["audio": ["live_english": on]])
     }
 
+    /// This Mac's room when the congregation runs several meetings at once ("" = one meeting). Kept by the engine.
+    var room: String { engine.settings?.settings.server.room ?? "" }
+
+    func setRoom(_ name: String) async {
+        await engine.set(["server": ["room": name]])
+    }
+
     func setSharing(local: Bool) async {
         await engine.set(["server": ["sharing": local ? "local" : "cloud"]])
         // The engine picks its network address when it starts (this Mac only, or the Wi-Fi for local

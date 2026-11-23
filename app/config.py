@@ -67,6 +67,7 @@ class ServerCfg(BaseModel):
     # Hear Church app: "cloud" publishes meetings on hearchurch.com (anyone with the link, anywhere); "local"
     # keeps them on this Wi-Fi, for phones that scanned this meeting's QR code (/s/<key>).
     sharing: Literal["cloud", "local"] = "cloud"
+    room: str = ""   # Hear Church app: this computer's room ("Relief Society") when a congregation runs several at once
 
 
 class EngineCfg(BaseModel):

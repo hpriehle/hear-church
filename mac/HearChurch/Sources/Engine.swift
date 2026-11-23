@@ -524,7 +524,7 @@ struct EngineSettings: Decodable, Equatable {
         struct Tts: Decodable, Equatable { let engine: String; let voice: String; let rate: Int; let volume: Double; let speed: Double? }
         struct Translate: Decodable, Equatable { let claude_model: String }
         struct Voice: Decodable, Equatable { let engine: String; let voice: String; let speed: Double? }
-        struct Server: Decodable, Equatable { let sharing: String? }
+        struct Server: Decodable, Equatable { let sharing: String?; let room: String? }
         struct Stt: Decodable, Equatable { let language: String }
         let languages: [String]
         let audio: Audio

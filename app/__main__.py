@@ -59,12 +59,11 @@ def main() -> None:
 
     # The app shows the operator page itself, and only this Mac may open it (app/main.py _role). Other devices
     # on the Wi-Fi may only listen, with local sharing and the meeting's key (_may_listen).
-    # The app binds 127.0.0.1 (no macOS "accept incoming connections?" prompt) unless local sharing is on at
-    # launch ([server].sharing == "local" in the saved settings): then 0.0.0.0, so phones on the Wi-Fi reach
-    # the listening page. Changing the setting while running needs an engine restart; /api/status reports
-    # `restart_required` and `listening_on` for the Swift app.
+    # The app binds 0.0.0.0: phones on the Wi-Fi reach the listening page with local sharing, and also when the
+    # server is lost during an online meeting (docs/rooms.md). Everything else answers this computer only
+    # (app_mode_lan, _role, _may_listen).
     if args.app:
-        host = "0.0.0.0" if settings.server.sharing == "local" else "127.0.0.1"
+        host = "0.0.0.0"
     else:
         host = settings.server.host
     appmod.S.bind_host = host

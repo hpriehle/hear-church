@@ -83,3 +83,90 @@ async def test_one_meeting_shows_no_room(server, hear, client):
     assert info["live"] and len(info["rooms"]) == 1                  # a picker needs two
     assert hear.live.get(cong["id"], " chapel ") is hear.live.get(cong["id"])   # ?room= matches as typed, any case
     await a.close()
+
+
+# ------------------------------------------------------------------ the app: a server lost mid-meeting
+
+async def test_a_server_drop_mid_meeting_serves_the_wifi_and_goes_back(server, hear, monkeypatch):
+    from types import SimpleNamespace as NS
+
+    import live.sender
+    from app import main
+    from app.engine import WIFI_TYPE, PublishClient
+
+    cong, token = make_cong(hear)
+    announced, closed = [], []
+    monkeypatch.setattr(live.sender, "advertise", lambda *a: announced.append(a) or (lambda: closed.append(1)))
+    monkeypatch.setattr(PublishClient, "METER_EVERY_S", 0.1)
+    main.S.settings.server.room = "Primary"
+    main.S.settings.server.public_url = "https://hearchurch.com/dakar-ward"
+    chans = {"fr": NS(hub=NS(taps=[], count=1), broadcaster=NS(taps=[], listeners=0))}
+    pipe = NS(running=True, started_at=1.0, channels=chans, on_channels=chans)
+    main.S.pipeline = pipe
+    real = f"ws://127.0.0.1:{server}/ws/engine"
+    client = PublishClient(real, token, "Primary Mac")
+    main.S.engine_client = client
+    task = asyncio.create_task(client.run_forever())
+
+    async def until(cond):
+        for _ in range(200):
+            if cond():
+                return
+            await asyncio.sleep(0.05)
+        raise AssertionError("timed out")
+    try:
+        await until(lambda: client.running)
+        assert hear.live.get(cong["id"], "primary") is not None
+        main.S.app_mode = True
+        assert not main._may_listen("10.0.0.9", {}, {})               # online: phones on the Wi-Fi go to the server
+        client.url = "ws://127.0.0.1:9/ws/engine"                        # the server is gone
+        for link in list(hear.live.links):
+            await link.ws.close()
+        await until(lambda: announced)
+        name, _ip, _port, kind, props = announced[0]
+        assert kind == WIFI_TYPE and props["slug"] == "dakar-ward" and props["room"] == "Primary"
+        assert props["session"] == client.session_code
+        assert client.lost_server() and "server" in client.info()["notice"]
+        assert main._may_listen("10.0.0.9", {}, {})                    # phones on the Wi-Fi listen here, no key
+        client._speech(7, 12.0, ["fr"])                                  # still metered: a phone here hears French
+        assert client.meter[client.session_code][7]["langs"] == ["fr"]
+
+        client.url = real                                                # the server is back
+        main.S.app_mode = False
+        await until(lambda: client.running)
+        await until(lambda: closed)
+        assert pipe.running and hear.live.get(cong["id"], "Primary") is not None   # the meeting never stopped
+        await until(lambda: hear.db.speech_by_language(cong["id"]).get("fr") == 12.0)
+    finally:
+        main.S.app_mode = False
+        main.S.engine_client = None
+        main.S.settings.server.room = ""
+        task.cancel()
+        await asyncio.gather(task, return_exceptions=True)
+        del main.S.pipeline
+
+
+def test_the_app_answers_phones_on_the_wifi_only_with_listening(hear, client, monkeypatch):
+    from types import SimpleNamespace as NS
+
+    import pytest
+    from starlette.websockets import WebSocketDisconnect
+
+    from app import main
+
+    monkeypatch.setattr(main.S, "app_mode", True)
+    monkeypatch.setattr(main.S, "local_addrs", {"127.0.0.1"})             # the test client is another device
+    monkeypatch.setattr(main.S, "pipeline", NS(channels={}), raising=False)
+    for lost in (False, True):
+        monkeypatch.setattr(main, "wifi_fallback", lambda: lost)
+        assert client.get("/api/status").status_code == 403
+        assert client.post("/api/settings?key=boss", json={}).status_code == 403
+        for path in ("/ws/operator?key=boss", "/ws/speak?key=boss", "/ws/talk?key=boss"):
+            with pytest.raises(WebSocketDisconnect):
+                with client.websocket_connect(path) as ws:
+                    ws.receive_text()
+        assert client.get("/stream/zz.mp3").status_code == (404 if lost else 403)
+    monkeypatch.setattr(main, "wifi_fallback", lambda: False)
+    with pytest.raises(WebSocketDisconnect):
+        with client.websocket_connect("/ws/listen") as ws:
+            ws.receive_text()

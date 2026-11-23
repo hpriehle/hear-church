@@ -444,10 +444,11 @@ def lan_addresses(ip: str) -> list[str]:
     return out
 
 
-def advertise(name: str, ip: str, port: int):
-    """Advertise over mDNS/Bonjour. Returns a closer or None."""
+def advertise(name: str, ip: str, port: int, kind: str = P.MDNS_TYPE, props: dict[str, str] | None = None):
+    """Advertise over mDNS/Bonjour (Live's service unless `kind`/`props` say otherwise). Returns a closer or None."""
+    props = {"v": str(P.VERSION), "ch": "en"} if props is None else props
     if sys.platform == "darwin":
-        return _advertise_mac(name, port)
+        return _advertise_mac(name, port, kind, props)
     try:
         from zeroconf import ServiceInfo, Zeroconf
     except ImportError:
@@ -458,8 +459,7 @@ def advertise(name: str, ip: str, port: int):
         log.warning("mDNS: no network address phones could reach (only %s)", ip)
         return None
     # One address (the default route's): phones may try only the first, and bridges (Docker, Hyper-V) can't be reached
-    info = ServiceInfo(P.MDNS_TYPE, f"{name}.{P.MDNS_TYPE}", addresses=[socket.inet_aton(addrs[0])],
-                       port=port, properties={"v": str(P.VERSION), "ch": "en"})
+    info = ServiceInfo(kind, f"{name}.{kind}", addresses=[socket.inet_aton(addrs[0])], port=port, properties=props)
     zc = Zeroconf(interfaces=addrs)
     try:
         zc.register_service(info)
@@ -474,15 +474,15 @@ def advertise(name: str, ip: str, port: int):
     return close
 
 
-def _advertise_mac(name: str, port: int):
+def _advertise_mac(name: str, port: int, kind: str, props: dict[str, str]):
     """Through the Mac's own Bonjour (mDNSResponder): it announces on every network with the right address. The app
     may not send multicast itself (Local Network: DenyMulticast), so zeroconf only reached lo0 (2026-11-21).
     The registration ends when this process does."""
     import ctypes
     lib = ctypes.CDLL("/usr/lib/libSystem.B.dylib")
     ref = ctypes.c_void_p()
-    txt = b"".join(bytes([len(kv)]) + kv for kv in (f"v={P.VERSION}".encode(), b"ch=en"))
-    err = lib.DNSServiceRegister(ctypes.byref(ref), 0, 0, name.encode(), P.MDNS_TYPE.removesuffix(".local.").encode(),
+    txt = b"".join(bytes([len(kv)]) + kv for kv in (f"{k}={v}".encode()[:255] for k, v in props.items()))
+    err = lib.DNSServiceRegister(ctypes.byref(ref), 0, 0, name.encode(), kind.removesuffix(".local.").encode(),
                                  None, None, ctypes.c_uint16(socket.htons(port)), len(txt), txt, None, None)
     if err:
         log.warning("Bonjour advertise failed: error %d", err)

@@ -277,7 +277,8 @@ def test_session_start_carries_speakers_and_targets(monkeypatch):
     sent = []
     pipe = SimpleNamespace(running=True, started_at=1.0, on_channels={"en": 1, "lv": 2}, speakers=["ru", "lv"],
                            speaker="lv")
-    M = SimpleNamespace(S=SimpleNamespace(pipeline=pipe), legacy_speaker=lambda: "ru")
+    M = SimpleNamespace(S=SimpleNamespace(pipeline=pipe, settings=SimpleNamespace(server=SimpleNamespace(room="Primary"))),
+                        legacy_speaker=lambda: "ru")
     monkeypatch.setattr(engine, "_m", lambda: M)
     c = engine.PublishClient.__new__(engine.PublishClient)
     c.meter, c.announced, c.refused_run, c.session_code, c.private = {}, False, 0.0, "", False
@@ -297,7 +298,7 @@ def test_session_start_carries_speakers_and_targets(monkeypatch):
     start = sent[0]
     assert start["type"] == "session_start" and start["languages"] == start["targets"] == ["en", "lv"]
     assert start["speakers"] == ["ru", "lv"] and start["speaker"] == "ru" and start["passthrough"]
-    assert start["live_english"] is False
+    assert start["live_english"] is False and start["room"] == "Primary"
     assert sent[1] == {"type": "languages", "languages": ["en", "lv"], "targets": ["en", "lv"],
                        "speakers": ["ru", "lv", "en"], "live_english": False}
     assert sent[2]["type"] == "languages" and sent[2]["live_english"] is True

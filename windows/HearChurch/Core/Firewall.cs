@@ -11,8 +11,11 @@ namespace HearChurch.Core;
 public static class Firewall
 {
     public const string RuleName = "Hear Church (This Wi-Fi only)";
-    /// <summary>Live English: phones on the Wi-Fi send UDP to the engine (live/protocol.py, port 47300) and find it by Bonjour (5353).</summary>
-    public const string LiveRuleName = "Hear Church (Live)";
+    /// <summary>Live: phones on the Wi-Fi send UDP to the engine (live/protocol.py, port 47300) and find it by Bonjour (5353).
+    /// The same rule lets them reach the engine's listening page (TCP) while the server is lost mid-meeting
+    /// (docs/rooms.md): so it is for any protocol, still only inbound to the engine. Renamed from "Hear Church (Live)",
+    /// a UDP-only rule, so PCs that have that one are asked once more.</summary>
+    public const string LiveRuleName = "Hear Church (Live and Wi-Fi)";
 
     /// <summary>Is there already a rule for this engine (this install's path)? netsh's "show rule" needs no elevation.</summary>
     public static bool HasRule(string exe, string rule = RuleName)
@@ -37,8 +40,8 @@ public static class Firewall
 
     /// <summary>The netsh arguments that add the rule (one string: the elevated start can't take an argument list).</summary>
     public static string AddRuleArguments(string exe, bool live = false) => live
-        ? $"advfirewall firewall add rule name=\"{LiveRuleName}\" dir=in action=allow protocol=UDP localport=47300,5353 profile=any " +
-          $"enable=yes program=\"{exe}\" description=\"Phones on this Wi-Fi hear the room audio (Live).\""
+        ? $"advfirewall firewall add rule name=\"{LiveRuleName}\" dir=in action=allow protocol=any profile=any " +
+          $"enable=yes program=\"{exe}\" description=\"Phones on this Wi-Fi hear the room audio (Live), and keep listening if the server is lost.\""
         : $"advfirewall firewall add rule name=\"{RuleName}\" dir=in action=allow protocol=TCP profile=any enable=yes " +
         $"program=\"{exe}\" description=\"Phones on this Wi-Fi reach Hear Church's translation (Settings: This Wi-Fi only).\"";
 

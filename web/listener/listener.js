@@ -37,25 +37,25 @@
           notLive: "En attente", live: "En direct", loading: "Chargement…", title: "Traduction en direct",
           off: "Cette traduction est arrêtée pour le moment.", liveWait: "En direct — la traduction va s'afficher ici.",
           done: "La traduction est terminée.", begin: "La traduction commencera au début de la réunion.",
-          speaker: "L'orateur parle {name}. Écoutez dans la salle." },
+          speaker: "L'orateur parle {name}. Écoutez dans la salle.", mainRoom: "Salle principale" },
     en: { conn: ["Connected", "Connecting…", "Reconnecting…"], mute: "Mute", unmute: "Turn sound on",
           tap: "Tap to listen · use headphones", tapBtn: "Tap the button to turn the sound on",
           notLive: "Waiting", live: "Live", loading: "Loading…", title: "Live translation",
           off: "This translation is paused for now.", liveWait: "Live — the translation will appear here.",
           done: "The translation has ended.", begin: "The translation will begin when the meeting starts.",
-          speaker: "The speaker is speaking {name}. Listen in the room." },
+          speaker: "The speaker is speaking {name}. Listen in the room.", mainRoom: "Main room" },
     es: { conn: ["Conectado", "Conectando…", "Reconectando…"], mute: "Silenciar", unmute: "Activar el sonido",
           tap: "Toque para escuchar · use auriculares", tapBtn: "Toque el botón para activar el sonido",
           notLive: "En espera", live: "En vivo", loading: "Cargando…", title: "Traducción en vivo",
           off: "Esta traducción está en pausa por ahora.", liveWait: "En vivo — la traducción aparecerá aquí.",
           done: "La traducción ha terminado.", begin: "La traducción empezará cuando comience la reunión.",
-          speaker: "El orador está hablando {name}. Escuche en la sala." },
+          speaker: "El orador está hablando {name}. Escuche en la sala.", mainRoom: "Sala principal" },
     ru: { conn: ["Подключено", "Подключение…", "Переподключение…"], mute: "Выключить звук", unmute: "Включить звук",
           tap: "Нажмите, чтобы слушать · используйте наушники", tapBtn: "Нажмите кнопку, чтобы включить звук",
           notLive: "Ожидание", live: "В эфире", loading: "Загрузка…", title: "Перевод в прямом эфире",
           off: "Этот перевод пока приостановлен.", liveWait: "В эфире — перевод появится здесь.",
           done: "Перевод завершён.", begin: "Перевод начнётся, когда начнётся собрание.",
-          speaker: "Выступающий говорит на языке: {name}. Слушайте в зале." },
+          speaker: "Выступающий говорит на языке: {name}. Слушайте в зале.", mainRoom: "Основной зал" },
   };
   const U = BASE ? UI_TEXT[(navigator.language || "en").slice(0, 2)] || UI_TEXT.en : UI_TEXT.fr;
   if (BASE) {
@@ -148,6 +148,35 @@
     return `${none} ${nextLabel} ${day}`;
   }
 
+  // ------------------------------------------------------------------ room picker
+  // A congregation may be live in several rooms at once (docs/rooms.md): the phone picks one, shown only when 2+ are
+  // live. null = the server's choice (the first room started); "" = the unnamed room.
+  let room = params.get("room"), shownRoom = null;
+  const roomsEl = $("rooms");
+  const roomQuery = (sep) => (room === null ? "" : `${sep}room=${encodeURIComponent(room)}`);
+  function renderRooms(list) {
+    roomsEl.hidden = list.length < 2;
+    roomsEl.innerHTML = "";
+    for (const name of list) {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.textContent = name || U.mainRoom;
+      b.setAttribute("aria-pressed", name === shownRoom ? "true" : "false");
+      b.onclick = () => switchRoom(name);
+      roomsEl.appendChild(b);
+    }
+  }
+  function switchRoom(name) {
+    if (name === shownRoom) return;
+    room = name;
+    clearCaptions();
+    try { if (ws) { ws.onclose = null; ws.onmessage = null; ws.close(); } } catch {}
+    ws = null;
+    connect();
+    clipQueue.length = 0;
+    if (MODE === "stream" && audio.src && !audio.paused) startStream();
+  }
+
   // ------------------------------------------------------------------ language picker
   let shownLang = null;
   const langsEl = $("langs");
@@ -193,7 +222,7 @@
     if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) return;
     setConn("wait");
     const proto = location.protocol === "https:" ? "wss" : "ws";
-    ws = new WebSocket(`${proto}://${location.host}${BASE}/ws/listen`);
+    ws = new WebSocket(`${proto}://${location.host}${BASE}/ws/listen` + (BASE ? roomQuery("?") : ""));
     ws.onopen = () => {
       wsDelay = 1000;
       lastPong = Date.now();
@@ -218,6 +247,11 @@
           speaker = m.speaker || "en";
           passthrough = !!m.passthrough;
           renderLangs(m.languages || []);
+          if (BASE && !m.live && room !== null && (m.rooms || []).length) {   // the chosen room ended: go to one live
+            room = null; ws.onclose = null; ws.close(); ws = null; connect(); break;
+          }
+          shownRoom = m.live ? m.room ?? null : null;
+          renderRooms(m.rooms || []);
           boot = m.boot;
           session = m.session;
           live = !!m.live;
@@ -244,6 +278,7 @@
           break;
         case "onair": markOnAir(m.seq); break;
         case "languages": renderLangs(m.languages || []); break;
+        case "rooms": renderRooms(m.rooms || []); break;
         case "lang_state": langOn = !!m.on; updateWaiting(); break;
         case "speaker": speaker = m.speaker || "en"; passthrough = !!m.passthrough; updateWaiting(); break;
         case "status":
@@ -304,7 +339,7 @@
       return;
     }
     ignorePauseUntil = Date.now() + 1500;
-    audio.src = (lang ? `${BASE}/stream/${lang}.mp3` : "/stream.mp3") + "?t=" + Date.now();   // always join at the live point
+    audio.src = (lang ? `${BASE}/stream/${lang}.mp3` : "/stream.mp3") + "?t=" + Date.now() + (BASE ? roomQuery("&") : "");   // always join at the live point
     lastTime = 0; stuckSince = 0;
     const p = audio.play();
     if (p) p.catch((err) => {

@@ -122,6 +122,11 @@ public sealed class AppModel
     /// <summary>Live is on and Windows Firewall may block it: the step shown under the Live toggle.</summary>
     public string? LiveFirewall { get; private set; }
 
+    /// <summary>This PC's room when the congregation runs several meetings at once ("" = one meeting). Kept by the engine.</summary>
+    public string Room => Engine.Settings?.Settings.Server.Room ?? "";
+
+    public Task SetRoom(string name) => Engine.Set(new JsonObject { ["server"] = new JsonObject { ["room"] = name } });
+
     public async Task SetSharing(bool local)
     {
         await Engine.Set(new JsonObject { ["server"] = new JsonObject { ["sharing"] = local ? "local" : "cloud" } });

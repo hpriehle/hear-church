@@ -157,7 +157,7 @@ public sealed class EngineSettings
             public double InputGain { get; set; } = 1;
             public bool? LiveEnglish { get; set; }
         }
-        public sealed class ServerInfo { public string? Sharing { get; set; } }
+        public sealed class ServerInfo { public string? Sharing { get; set; } public string? Room { get; set; } }
         public sealed class TtsInfo
         {
             public string Engine { get; set; } = "";
