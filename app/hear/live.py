@@ -19,10 +19,10 @@ An engine (the congregation's Mac) connects to /ws/engine with "Authorization: B
                  binary: one byte = index into hello.languages, then MP3 bytes
                  {"type": "session_stop"}
                  {"type": "meter", session, items: [{seq, s, langs}]}   seconds of speech per chunk, in the
-                     languages someone listened to; any session of this congregation, also after it ended
+                     languages it was translated into; any session of this congregation, also after it ended
   hub → engine   {"type": "session_started", session, resumed}   {"type": "session_refused", message}
                  {"type": "session_ended", message}   the hub closed the session itself (congregation hidden)
-                 {"type": "listeners", stream, captions, heard, langs}   heard = languages with a phone on them now,
+                 {"type": "listeners", stream, captions, heard, langs}   heard = languages to bill (all of them),
                                                                        langs = {code: [stream, captions]}
                  {"type": "meter_ok", session, seqs, unknown}   the items stored (resent ones too); unknown = no
                      such session here, so the engine drops that report
@@ -143,8 +143,9 @@ class LiveSession:
         return sum(h.count for h in self.hubs.values())
 
     def heard(self) -> list[str]:
-        """Languages someone is listening to or reading right now: only these are billed."""
-        return sorted(c for c in self.hubs if self.hubs[c].count or self.streams[c].listeners)
+        """The languages the engine bills: all of them, phones or not (decision 2026-11-24: translating is billed,
+        not listening). Engines up to 0.3.1 bill only the languages named here, so this bills those too."""
+        return sorted(self.hubs)
 
     def by_lang(self) -> dict[str, list[int]]:
         """Phones per language: [listening to the voice, reading captions] (the operator's listeners per language)."""

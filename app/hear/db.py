@@ -9,7 +9,7 @@ Congregations that existed before billing are grandfathered as "own_key": they w
 "internal" (rare, set only by the operator, never advertised): the hub translates for it at no charge with Harrison's
 own Claude Code login (app/hear/internal.py); its meetings are metered like the others but never debited or refused.
 
-Metering and the ledger: the Mac reports seconds of speech per heard language (`record_speech`, idempotent on the
+Metering and the ledger: the Mac reports seconds of speech per translated language (`record_speech`, idempotent on the
 session and the Mac's chunk number). Credit is stored as the language-minutes bought (`credits.seconds`): a bundle
 gives its hours (BUNDLES: $20 = 4 h, $50 = 11 h, $100 = 25 h, $250 = 70 h); top-ups from before the bundles keep the
 minutes they got at $5 per language-hour. `add_credit` is idempotent on the Stripe payment id; a Stripe refund takes
@@ -1213,7 +1213,7 @@ class Database:
     # ------------------------------------------------------------ metering
     def record_speech(self, cid: int, code: str, items: list) -> list[int] | None:
         """Store the Mac's speech report for session `code` of congregation `cid`: items [{seq, s, langs}] = seconds
-        of speech in chunk `seq`, translated into `langs` that someone was listening to. Returns the seqs taken
+        of speech in chunk `seq`, translated into `langs` (listeners or not, decision 2026-11-24). Returns the seqs taken
         (stored now or before: a resent report counts once), or None when the session is unknown. Malformed items
         are skipped and not acknowledged; a chunk's length is capped at MAX_CHUNK_S."""
         rows = self._q("SELECT id FROM sessions WHERE congregation_id = ? AND code = ? ORDER BY id DESC LIMIT 1",

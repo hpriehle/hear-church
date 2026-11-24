@@ -475,7 +475,7 @@ class PublishClient(EngineClient):
         self.notice = ""                  # the hub's last refusal / ending of our session, for the operator page
         self.listeners = {"stream": 0, "captions": 0}  # phones on the hub, as it reports them
         self.listeners_by_lang: dict[str, dict[str, int]] = {}   # the same per language (hubs since V3.4)
-        self.heard: set[str] = set()      # languages with a phone on them, as the hub reports them: only these are billed
+        self.heard: set[str] = set()      # languages the hub says to bill (all since 2026-11-24); billing no longer reads it
         self.meter: dict[str, dict[int, dict]] = {}   # session code → seq → speech not yet acknowledged by the hub
         # Unacknowledged meter items are also kept on disk (a quit, a crash or a long drop doesn't lose them),
         # for this hub and device only: a Mac signed into another congregation doesn't send them.
@@ -733,15 +733,11 @@ class PublishClient(EngineClient):
             self._tap(taps, self._speech)
 
     def _speech(self, seq: int, seconds: float, langs: list[str]) -> None:
-        """A chunk of speech went out in `langs`: keep it for the hub's meter if someone hears it in this session.
-        Someone = a phone on the hub, or (online meetings too) a listener on this Mac itself: its own listening
-        page or stream, translated through the hub's proxy like the rest (docs/riga-metering-2026-11-15.md)."""
-        if not ((self.running or self.lost_server()) and self.session_code and seconds > 0):
+        """A chunk of speech was translated into `langs`: keep it for the hub's meter, whether or not anyone listens
+        (decision 2026-11-24: translating is billed, not listening)."""
+        if not ((self.running or self.lost_server()) and self.session_code and seconds > 0 and langs):
             return
-        pool = self.heard if self.private else self.heard | self._local_heard()
-        heard = sorted(c for c in langs if c in pool)
-        if not heard:
-            return
+        heard = sorted(langs)
         self.meter.setdefault(self.session_code, {})[seq] = {"seq": seq, "s": round(float(seconds), 2), "langs": heard}
         extra = sum(len(v) for v in self.meter.values()) - self.METER_KEEP
         for code in list(self.meter):
@@ -772,8 +768,7 @@ class PublishClient(EngineClient):
         self._meter_changed()
 
     def _local_heard(self) -> set[str]:
-        """Languages with a listener on this Mac (stream or captions): what a Wi-Fi-only meeting bills, and what an
-        online one bills on top of the hub's phones."""
+        """Languages with a listener on this Mac (stream or captions)."""
         chans = getattr(getattr(_m().S, "pipeline", None), "channels", None) or {}
         return {c for c, ch in chans.items()
                 if getattr(ch.hub, "count", 0) or getattr(ch.broadcaster, "listeners", 0)}

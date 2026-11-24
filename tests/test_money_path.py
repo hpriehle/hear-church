@@ -130,11 +130,11 @@ def test_a_trial_across_a_month_boundary_leaves_both_free_hours():
     assert b["free_left_min"] == 60 and b["balance_min"] == 0 and b["trial"]["active"] is False
 
 
-def test_only_the_languages_listened_to_are_metered_once_per_chunk():
+def test_only_the_languages_reported_are_metered_once_per_chunk():
     db, c = new_db()
     db.set_free_trial(c["id"], False)
     db.start_session(c["id"], ["fr", "es", "pt"], code="m1")           # three offered
     assert db.record_speech(c["id"], "m1", [{"seq": 1, "s": 600.0, "langs": ["fr", "fr", "es"]},
                                             {"seq": 2, "s": 30.0, "langs": []}]) == [1]
-    assert db.speech_by_language(c["id"]) == {"es": 60.0, "fr": 60.0}   # a chunk is capped at 60 s; pt unheard
+    assert db.speech_by_language(c["id"]) == {"es": 60.0, "fr": 60.0}   # a chunk is capped at 60 s; pt not reported
     assert db.balance(c["id"])["used_min"] == 2

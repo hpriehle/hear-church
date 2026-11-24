@@ -3,6 +3,20 @@
 Survey of commit 24be883 (file:line there), then what branch `chat/hc-pricing` adds. Plan: future-pacing.md §4
 "Claude access & payment"; rules: docs/hear-church-plan.md:270-281.
 
+## What is billed: translating, phones or not (Nov 24 decision; `chat/hc-bill-translating`, not deployed)
+
+Harrison, 2026-11-24: "it is not when phones are connected but from translating. it doesnt matter if a phone is
+connected or not". Every language a chunk is translated into is metered for that chunk's speech seconds (same rate,
+free hour and trial). This replaces "only the languages someone hears" in the sections below (`heard`, local
+listeners on the Mac, "es is translated but nobody listens").
+- Engine (`PublishClient._speech`, `app/engine.py`): meters every translated language; `heard` no longer gates it.
+- Hub (`LiveSession.heard`, `app/hear/live.py`): the `listeners` message's `heard` is now every language of the
+  session. Installed apps (0.3.1 and earlier) bill only what the hub calls heard, so they bill everything too,
+  with no update. Same meter path, so a resent chunk counts once (session + seq).
+- Not covered for installed apps: a "this Wi-Fi only" meeting (they ignore the hub's `heard` there and bill only
+  local listeners) and chunks before the first `listeners` message (up to 5 s after the start). Fixed by updating.
+- own_key and internal congregations: metered, never charged, as before.
+
 ## Pricing now (Nov 14 decision; `chat/hc-v3-mac`, not deployed)
 
 This section is current; the sections below are the history and still say $5/h and a one-time free hour.

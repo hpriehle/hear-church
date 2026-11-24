@@ -11,7 +11,7 @@ from app.engine import PublishClient
 from app.hear import live as hear_live
 from app.hear.db import Database
 
-from test_hear import client, engine, hear, listener, make_cong, recv, server, start  # noqa: F401  (fixtures)
+from test_hear import client, engine, hear, make_cong, recv, server, start  # noqa: F401  (fixtures)
 
 
 def cong_db(billing="credits"):
@@ -204,7 +204,7 @@ def test_top_up_route_is_operator_only_and_idempotent(client, hear):
     assert listed["balance"]["balance_usd"] == 10
 
 
-# ------------------------------------------------------------------ the Mac: listener gating, batching, resending
+# ------------------------------------------------------------------ the Mac: what it meters, batching, resending
 
 def mac_client():
     c = PublishClient("ws://unused", "t", "Mac")
@@ -214,38 +214,19 @@ def mac_client():
     return c, sent
 
 
-def test_the_mac_meters_only_heard_languages_and_only_while_live():
+def test_the_mac_meters_every_translated_language_phones_or_not_and_only_while_live():
+    """Decision 2026-11-24: translating is billed, not listening. Riga (riga-2): captions on the Mac, 0 phones."""
     c, _ = mac_client()
-    c.heard = {"fr"}
-    c._speech(1, 8.0, ["fr", "es"])                                  # es is translated but nobody listens
-    c._speech(2, 6.0, ["es"])                                        # nobody hears anything: not metered
-    c.heard = {"fr", "es"}
-    c._speech(3, 5.0, ["fr", "es"])
+    c.heard = set()                                                  # no phone on the hub, none on this Mac
+    c._speech(1, 8.0, ["fr", "es"])                                  # 2 languages: billed twice
+    c._speech(2, 6.0, ["es"])
+    c._speech(3, 5.0, [])                                            # translated into nothing (passed through)
     c._speech(4, 0.0, ["fr"])                                        # no speech
-    assert c.meter == {"s1": {1: {"seq": 1, "s": 8.0, "langs": ["fr"]},
-                              3: {"seq": 3, "s": 5.0, "langs": ["es", "fr"]}}}
+    assert c.meter == {"s1": {1: {"seq": 1, "s": 8.0, "langs": ["es", "fr"]},
+                              2: {"seq": 2, "s": 6.0, "langs": ["es"]}}}
     c.running = False                                                # refused, or the link is down
     c._speech(5, 5.0, ["fr"])
     assert 5 not in c.meter["s1"]
-
-
-def test_an_online_meeting_also_meters_listeners_on_this_mac(monkeypatch):
-    """Riga, Nov 15 (docs/riga-metering-2026-11-15.md): an online meeting heard only on the Mac itself (its own
-    listening page or stream) was translated through the hub's proxy but never metered: only the hub's phones counted."""
-    chans = {"en": NS(hub=NS(count=1), broadcaster=NS(listeners=0)),     # captions open on this Mac
-             "fr": NS(hub=NS(count=0), broadcaster=NS(listeners=1)),     # the voice played on this Mac
-             "es": NS(hub=NS(count=0), broadcaster=NS(listeners=0))}
-    monkeypatch.setattr(main.S, "pipeline", NS(channels=chans), raising=False)
-    c, _ = mac_client()
-    c.heard = set()                                                  # no phone on the hub
-    c._speech(1, 4.0, ["en", "fr", "es"])
-    c.heard = {"es"}                                                 # a phone on the hub too
-    c._speech(2, 3.0, ["en", "es"])
-    assert c.meter == {"s1": {1: {"seq": 1, "s": 4.0, "langs": ["en", "fr"]},
-                              2: {"seq": 2, "s": 3.0, "langs": ["en", "es"]}}}
-    c.running = False                                                # not live on the hub: nothing to bill
-    c._speech(3, 5.0, ["en"])
-    assert 3 not in c.meter["s1"]
 
 
 def test_the_mac_resends_until_acknowledged_and_bounds_its_backlog(monkeypatch):
@@ -268,9 +249,22 @@ def test_the_mac_resends_until_acknowledged_and_bounds_its_backlog(monkeypatch):
     assert list(c.meter["s1"]) == [12, 13, 14]                       # the oldest go first
 
 
-async def test_the_mac_reports_heard_speech_to_the_hub(server, hear, monkeypatch):
-    """End to end: a Mac meeting in fr + es with a listener on fr only bills fr only, through the real link."""
+def _speech_0_3_1(self, seq, seconds, langs):
+    """The Mac app up to 0.3.1 (already installed): bills only the languages the hub calls heard."""
+    if (self.running or self.lost_server()) and self.session_code and seconds > 0:
+        heard = sorted(c for c in langs if c in self.heard)
+        if heard:
+            self.meter.setdefault(self.session_code, {})[seq] = {"seq": seq, "s": round(float(seconds), 2),
+                                                                 "langs": heard}
+
+
+@pytest.mark.parametrize("old_app", [False, True])
+async def test_the_mac_reports_translated_speech_to_the_hub_with_no_phone(server, hear, monkeypatch, old_app):
+    """End to end: a Mac meeting in fr + es with no phone at all bills both languages, once each, through the real
+    link; an installed 0.3.1 app too (the hub tells it every language is heard)."""
     monkeypatch.setattr(hear_live, "LISTENERS_EVERY_S", 0.1)
+    if old_app:
+        monkeypatch.setattr(PublishClient, "_speech", _speech_0_3_1)
     monkeypatch.setattr(PublishClient, "METER_EVERY_S", 0.2)
     cong, token = make_cong(hear)
     chans = {c: NS(hub=NS(taps=[]), broadcaster=NS(taps=[])) for c in ("fr", "es")}
@@ -290,15 +284,15 @@ async def test_the_mac_reports_heard_speech_to_the_hub(server, hear, monkeypatch
         await until(lambda: mac.connected)
         pipe.running, pipe.started_at = True, 1.0
         await until(lambda: mac.running)
-        ws, _ = await listener(server, "dakar-ward", "fr")
-        await until(lambda: mac.heard == {"fr"})
+        await until(lambda: {"fr", "es"} <= mac.heard)                # no phone: every language is billed
         for tap in pipe.speech_taps:
             tap(1, 30.0, ["fr", "es"])
+            tap(1, 30.0, ["fr", "es"])                               # the same chunk again: counted once
         await until(lambda: not mac.meter and hear.db.speech_by_language(cong["id"]))
-        assert hear.db.speech_by_language(cong["id"]) == {"fr": 30.0}
+        assert hear.db.speech_by_language(cong["id"]) == {"fr": 30.0, "es": 30.0}
         pipe.running = False
         await until(lambda: hear.live.get(cong["id"]) is None)
-        assert hear.db.balance(cong["id"])["used_min"] == 0.5
+        assert hear.db.balance(cong["id"])["used_min"] == 1.0         # 30 s x 2 languages
     finally:
         task.cancel()
         del main.S.pipeline

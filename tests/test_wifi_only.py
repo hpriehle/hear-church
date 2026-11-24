@@ -108,7 +108,7 @@ async def test_out_of_credit_refuses_a_wifi_only_meeting_too(server, hear):
 
 # ------------------------------------------------------------------ the Mac, end to end over the real link
 
-async def test_a_wifi_only_mac_meeting_translates_and_bills_its_own_listeners(server, hear, claude, client,
+async def test_a_wifi_only_mac_meeting_translates_and_bills_every_language(server, hear, claude, client,
                                                                            wifi_only, monkeypatch):
     monkeypatch.setattr(PublishClient, "METER_EVERY_S", 0.2)
     monkeypatch.setattr(hear_live, "LISTENERS_EVERY_S", 0.1)
@@ -145,9 +145,9 @@ async def test_a_wifi_only_mac_meeting_translates_and_bills_its_own_listeners(se
         for tap in chans["fr"].broadcaster.taps:
             tap(b"\xff\xfb" + b"\0" * 10)
         for tap in pipe.speech_taps:
-            tap(1, 30.0, ["fr", "es"])                               # es is translated but nobody listens
+            tap(1, 30.0, ["fr", "es"])                               # es is translated: billed, nobody listens
         await until(lambda: not mac.meter and hear.db.speech_by_language(cong["id"]))
-        assert hear.db.speech_by_language(cong["id"]) == {"fr": 30.0}
+        assert hear.db.speech_by_language(cong["id"]) == {"fr": 30.0, "es": 30.0}
         assert not [m for m in sent if isinstance(m, bytes) or m.get("type") == "hub"]
 
         hs = HubSession("SYSTEM", "opus", "low", client=HubClient(f"http://127.0.0.1:{server}", token))
@@ -159,7 +159,7 @@ async def test_a_wifi_only_mac_meeting_translates_and_bills_its_own_listeners(se
 
         pipe.running = False
         await until(lambda: hear.live.get_any(cong["id"]) is None)
-        assert hear.db.balance(cong["id"])["used_min"] == 0.5
+        assert hear.db.balance(cong["id"])["used_min"] == 1.0
     finally:
         task.cancel()
         del main.S.pipeline
@@ -205,7 +205,7 @@ def test_unsent_meter_reports_survive_a_restart(tmp_path, hear):
     assert path.exists()
 
     b = PublishClient("wss://hub.test/ws/engine", "tok", "Mac", meter_path=path)    # the app started again
-    assert b.meter == {"s1": {1: {"seq": 1, "s": 8.0, "langs": ["fr"]}, 2: {"seq": 2, "s": 6.0, "langs": ["fr"]}}}
+    assert b.meter == {"s1": {1: {"seq": 1, "s": 8.0, "langs": ["fr"]}, 2: {"seq": 2, "s": 6.0, "langs": ["es", "fr"]}}}
     sent = []
     b._send = sent.append
     b._send_meter()                                                  # goes out on the next link
