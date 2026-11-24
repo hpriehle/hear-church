@@ -1,6 +1,6 @@
 """Buying credit: Stripe Checkout (a mocked Stripe client, never the network), the signed webhook that credits the
-ledger once per payment, the balance on the billing answer and the Mac's speak page proxy, and the 6-hour resume
-allowed only from the Mac that started the meeting."""
+ledger once per payment, the balance on the billing answer and the Mac's speak page proxy, and the resume
+allowed only from the Mac that started the meeting, within minutes of its end."""
 import asyncio
 import json
 import time
@@ -12,6 +12,7 @@ import stripe
 from app import main
 from app.engine import PublishClient
 from app.hear import api as hear_api
+from app.hear.db import RESUME_S
 
 from test_hear import client, engine, hear, make_cong, recv, server, start  # noqa: F401  (fixtures)
 from test_metering import cong_db
@@ -226,7 +227,9 @@ def test_the_speak_page_reads_credit_and_buys_through_the_macs_hub_link(client, 
 
 def test_recent_session_matches_only_the_mac_that_started_it():
     db, c = cong_db()
-    db.start_session(c["id"], ["fr"], code="s1", billing="credits", device_id=7)
+    sid = db.start_session(c["id"], ["fr"], code="s1", billing="credits", device_id=7)
+    assert not db.recent_session(c["id"], "s1", 7)       # still open: the hub holds it live, nothing to carry on
+    db.end_session(sid)
     assert db.recent_session(c["id"], "s1", 7)
     assert not db.recent_session(c["id"], "s1", 8)
     assert not db.recent_session(c["id"], "s2", 7)
@@ -251,6 +254,47 @@ async def test_another_mac_cant_resume_a_meeting_to_skip_the_credit_check(server
     await b.close()
     await asyncio.sleep(0.05)
 
+
+
+async def ended_meeting_without_credit(server, hear, billing="credits", ago=0.0, room=None):
+    """A meeting run into the red, then lost by the hub `ago` seconds ago (link gone past the grace / hub restart)."""
+    cong, token = make_cong(hear, "Dakar Ward" if billing == "credits" else f"{billing} Ward")
+    hear.db._x("UPDATE congregations SET billing = ? WHERE id = ?", (billing, cong["id"]))
+    a = await engine(server, token)
+    code = (await start(a, ["fr"], room=room))["session"]
+    await a.send(json.dumps({"type": "meter", "session": code,
+                             "items": [{"seq": i, "s": 60.0, "langs": ["fr"]} for i in range(70)]}))
+    await recv(a, "meter_ok")
+    hear.live.end(hear.live.get(cong["id"], room), notify=False)
+    hear.db._x("UPDATE sessions SET ended_at = ? WHERE code = ?", (time.time() - ago, code))
+    return cong, a, code
+
+
+async def test_an_old_code_cant_start_a_new_meeting_without_credit(server, hear):
+    cong, a, code = await ended_meeting_without_credit(server, hear, ago=RESUME_S + 60)
+    refused = await start(a, ["fr"], resume=code)                 # the meeting ended 11 min ago: a new one
+    assert refused == {"type": "session_refused", "message": refused["message"]}
+    assert refused["message"].startswith("Dakar Ward is out of credit (balance -$")
+    assert refused["message"].endswith("Buy credit to start the next meeting.")
+    hear.db.add_credit(cong["id"], "pi_topup", 500)
+    assert (await start(a, ["fr"], resume=code))["type"] == "session_started"   # with credit: fine
+    await a.close()
+
+
+async def test_a_meeting_dropped_minutes_ago_carries_on_without_credit(server, hear):
+    cong, a, code = await ended_meeting_without_credit(server, hear, ago=RESUME_S - 60, room="Chapel")
+    again = await start(a, ["fr"], resume=code, room="Chapel")    # the Mac's meeting kept running: reconnect
+    assert again["type"] == "session_started"
+    assert hear.live.get(cong["id"], "Chapel").code == again["session"]
+    await a.close()
+
+
+async def test_own_key_and_internal_resume_an_old_code_whatever_the_balance(server, hear):
+    for billing in ("own_key", "internal"):
+        cong, a, code = await ended_meeting_without_credit(server, hear, billing, ago=RESUME_S * 10)
+        assert (await start(a, ["fr"], resume=code))["type"] == "session_started"
+        await a.close()
+        await asyncio.sleep(0.05)
 
 def test_a_delayed_payment_credits_when_it_succeeds_and_only_once(client, hear, keys):
     """Payment methods come from the Stripe Dashboard now, so a bank debit can complete unpaid and succeed later."""

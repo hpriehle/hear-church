@@ -33,7 +33,7 @@ which is all older apps know. If the engine's link drops the
 session stays open for hearchurch.grace_s (60 s) so a reconnect can resume it, then it ends.
 Credits: a new meeting of a credit-billed congregation with nothing left is refused here (`_start`, through
 Database.can_start); a running meeting, or one resuming after a drop or a hub restart, never is. Resuming after
-the grace counts only from the Mac (device token) that started that meeting, within 6 hours.
+the grace counts only from the Mac (device token) that started that meeting, within db.RESUME_S (10 min) of its end.
 
 Private sessions ("this Wi-Fi only" sharing on credits): the phones listen on the Mac itself, but the meeting still
 needs the hub for translation on credit (app/hear/proxy.py) and its meter. Such a session is a billing link only: it

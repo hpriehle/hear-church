@@ -312,6 +312,9 @@ def device_platform(value: Any) -> str | None:
 
 BILLING_TYPES = ("credits", "own_key", "internal")
 NO_CREDIT_NEEDED = ("own_key", "internal")   # metered, but never refused for balance or debited
+# a meeting that ended (link lost past the grace, or a hub restart) this recently may be carried on without the credit
+# check: covers a router or Mac restart, a hub redeploy; shorter than any real gap between two meetings
+RESUME_S = 10 * 60
 MAX_CHUNK_S = 60.0     # one reported chunk of speech is never longer than this (the chunker cuts far sooner)
 MAX_LANGS = 20
 HEALTH_KEEP_S = 30 * 86400   # meeting health reports are kept 30 days
@@ -1193,12 +1196,13 @@ class Database:
         """A server restart ends every session that was still open."""
         self._x("UPDATE sessions SET ended_at = ? WHERE ended_at IS NULL", (time.time(),))
 
-    def recent_session(self, cid: int, code: str, device_id: int, within_s: float = 6 * 3600) -> bool:
-        """Did Mac `device_id` of congregation `cid` start session `code` within the last `within_s`? (a meeting
-        being resumed). Another Mac of the congregation can't use the code to start a meeting without credit; a
-        session from before device ids were kept matches no Mac."""
+    def recent_session(self, cid: int, code: str, device_id: int, within_s: float = RESUME_S) -> bool:
+        """Did Mac `device_id` of congregation `cid` run session `code` until less than `within_s` ago? (a meeting
+        whose link dropped past the grace, or the hub restarted, being carried on). A meeting that ended longer ago
+        is over: its code starts nothing without the credit check. Another Mac of the congregation can't use the code;
+        a session from before device ids were kept matches no Mac."""
         return bool(code and self._q("SELECT 1 FROM sessions WHERE congregation_id = ? AND code = ? AND device_id = ?"
-                                     " AND started_at > ?", (cid, code, device_id, time.time() - within_s)))
+                                     " AND ended_at > ?", (cid, code, device_id, time.time() - within_s)))
 
     def ended_lately(self, cid: int, device_id: int, within_s: float) -> bool:
         """Did Mac `device_id` end a meeting of congregation `cid` in the last `within_s`? (its last sentences may
