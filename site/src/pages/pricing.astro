@@ -18,11 +18,11 @@ const perHour = (usd, hours) => "$" + (usd / hours).toFixed(2);
 
 const faq = [
   ["What does a typical meeting cost?",
-   "A 70-minute meeting usually has about 50 minutes of speaking. Heard in two languages, that is 100 language-minutes, about 1.7 language-hours: between $6 and $8.33 depending on the bundle. In one language, half that. After your free trial, your free hour each month covers the first hour."],
+   "A 70-minute meeting usually has about 50 minutes of speaking. Translated into two languages, that is 100 language-minutes, about 1.7 language-hours: between $6 and $8.33 depending on the bundle. In one language, half that. After your free trial, your free hour each month covers the first hour."],
   ["Is there a free trial?",
    "Every new church starts with 14 days free, up to 20 language-hours. After that, one free language-hour each month, then prepaid hours from $5 per language-hour. The 14 days start with your first translated meeting, and the trial ends after 14 days or 20 language-hours, whichever comes first. No card is needed."],
   ["What is a language-hour?",
-   "One hour of speech translated into one language that someone is listening to. An hour heard in two languages is two language-hours. A language nobody is following that day costs nothing."],
+   "One hour of speech translated into one language. An hour translated into two languages is two language-hours. Turn off a language you don't need that day and it costs nothing."],
   ["How does the free hour work?",
    "Every congregation gets one free language-hour each calendar month, starting once its free trial has ended. It is used first, before any hours you bought, and it renews on the 1st. Free time you don't use doesn't carry over to the next month."],
   ["Do listeners pay anything?",
@@ -48,7 +48,7 @@ const schema = {
   <article class="wrap">
     <header class="head">
       <h1>Church translation pricing</h1>
-      <p class="lede">Pay only for the time someone is speaking, in each language your members are listening to. Every new church starts with 14 days free, up to 20 language-hours. After that, one free language-hour each month, then prepaid hours from $5 per language-hour.</p>
+      <p class="lede">Pay only for the time someone is speaking, in each language you translate into. Every new church starts with 14 days free, up to 20 language-hours. After that, one free language-hour each month, then prepaid hours from $5 per language-hour.</p>
     </header>
 
     <section class="plans" aria-label="Plans">
@@ -120,7 +120,7 @@ const schema = {
           <ul class="yes">
             <li>Seconds of speech in which Hear Church recognizes words and translates them</li>
             <li>Sung words that Hear Church recognizes and translates</li>
-            <li>Each language, while at least one person is following it by voice or captions</li>
+            <li>Each language the meeting is translated into</li>
           </ul>
         </div>
         <div>
@@ -129,7 +129,7 @@ const schema = {
             <li>Silence and pauses</li>
             <li>Music and stretches with no recognized words</li>
             <li>Prayers or parts you choose not to translate</li>
-            <li>A language nobody is listening to</li>
+            <li>A language you turn off for that meeting</li>
             <li>Listeners: any number can follow, at no cost</li>
           </ul>
         </div>
