@@ -81,7 +81,7 @@ def message(kind: str, cong: dict[str, Any], t: dict[str, Any]) -> tuple[str, st
                     "https://hearchurch.com/setup\n\n"
                     f"Before Sunday, do the 5-minute test: {test}\n\n"
                     f"Your free trial is {days} days, up to {hours} language-hours, whichever comes first. The {days} "
-                    "days start with your first translated meeting, and a test with a phone listening counts, so do "
+                    "days start with your first translated meeting, and a test meeting counts too, so do "
                     "it in the week you plan to start. No card is needed.\n\n"
                     "Questions? Just reply to this e-mail."),
         "day3": ("Need a hand setting up before Sunday?",
